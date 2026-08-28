@@ -19,3 +19,20 @@ of what the agent is allowed to build a question from.
 
 Copyrighted textbook pages do not belong in this file — one paraphrased sentence
 per idea is what the pilot needs (`docs/RULES.md` §8.2).
+
+# Course calendar
+
+`course-plan.json` is what makes the companion timeline-aware rather than a
+question generator. Without real dates in it, every decision falls back to
+"whatever is due", which is the least interesting thing it can do.
+
+| Field | Meaning |
+|---|---|
+| `startsAt` | Local wall-clock time, `YYYY-MM-DD HH:MM`, in the course timezone. |
+| `topic` | What the lesson is about, quoted back in the reason. |
+| `covers` | Study items that lesson teaches — used to practise afterwards. |
+| `prepares` | Study items worth meeting before it. Falls back to `covers`. |
+
+Fill it in a couple of weeks at a time from the actual schedule. `npm run plan`
+shows what the calendar would produce for the coming week before a single
+message is sent.

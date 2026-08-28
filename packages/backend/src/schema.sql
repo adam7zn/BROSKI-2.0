@@ -10,10 +10,14 @@ CREATE TABLE IF NOT EXISTS interactions (
   source_text       TEXT NOT NULL,
   difficulty        TEXT NOT NULL,
   image             TEXT,
+  mode              TEXT NOT NULL DEFAULT 'PRACTISE',  -- PREPARE | PRACTISE | REVIEW
+  reason            TEXT NOT NULL DEFAULT '',           -- why this, why now
+  lesson_id         TEXT,
   question          TEXT,
   expected_answer   TEXT,
   rubric            TEXT,
   status            TEXT NOT NULL,          -- planned | sent | answered | no_reply
+  transcript        TEXT,                   -- JSON: the whole conversation
   trace             TEXT                    -- JSON: docs/ARCHITECTURE.md §11
 );
 
@@ -26,6 +30,8 @@ CREATE TABLE IF NOT EXISTS attempts (
   feedback          TEXT NOT NULL,
   confidence        REAL NOT NULL,
   deterministic     INTEGER NOT NULL,
+  hints_given       INTEGER NOT NULL DEFAULT 0,
+  student_turns     INTEGER NOT NULL DEFAULT 1,
   agent             TEXT NOT NULL,
   model             TEXT,
   prompt_version    TEXT NOT NULL,

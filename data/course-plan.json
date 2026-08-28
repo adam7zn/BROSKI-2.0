@@ -1,0 +1,70 @@
+{
+  "courseName": "Matematik — William",
+  "timezone": "Europe/Stockholm",
+  "lessons": [
+    {
+      "id": "l-01",
+      "startsAt": "2026-08-22 09:15",
+      "topic": "Linjära ekvationer",
+      "covers": [
+        "lin-eq-balance"
+      ],
+      "prepares": []
+    },
+    {
+      "id": "l-02",
+      "startsAt": "2026-08-24 13:00",
+      "topic": "Ekvationer med parenteser",
+      "covers": [
+        "lin-eq-parentheses"
+      ],
+      "prepares": [
+        "lin-eq-balance"
+      ]
+    },
+    {
+      "id": "l-03",
+      "startsAt": "2026-08-27 09:15",
+      "topic": "Räta linjens ekvation",
+      "covers": [
+        "linear-functions"
+      ],
+      "prepares": [
+        "lin-eq-balance"
+      ]
+    },
+    {
+      "id": "l-04",
+      "startsAt": "2026-08-29 13:00",
+      "topic": "Andragradsekvationer",
+      "covers": [
+        "quadratic-pq"
+      ],
+      "prepares": [
+        "lin-eq-parentheses"
+      ]
+    },
+    {
+      "id": "l-05",
+      "startsAt": "2026-08-31 09:15",
+      "topic": "Faktorsatsen",
+      "covers": [
+        "factor-theorem"
+      ],
+      "prepares": [
+        "quadratic-pq"
+      ]
+    },
+    {
+      "id": "l-06",
+      "startsAt": "2026-09-03 13:00",
+      "topic": "Potenslagar",
+      "covers": [
+        "exponent-rules"
+      ],
+      "prepares": [
+        "factor-theorem"
+      ]
+    }
+  ]
+}

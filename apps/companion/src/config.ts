@@ -53,6 +53,7 @@ export function describeEnvKeys(path = resolve(repoRoot, '.env')): string {
 export interface Config {
   databasePath: string;
   studyPlanPath: string;
+  coursePlanPath: string;
   telegramToken: string;
   telegramChatId: string;
   hasModelKey: boolean;
@@ -64,6 +65,7 @@ export function readConfig(): Config {
   return {
     databasePath: process.env['MSC_DATABASE'] ?? resolve(repoRoot, 'data/companion.db'),
     studyPlanPath: process.env['MSC_STUDY_PLAN'] ?? resolve(repoRoot, 'data/study-plan.json'),
+    coursePlanPath: process.env['MSC_COURSE_PLAN'] ?? resolve(repoRoot, 'data/course-plan.json'),
     telegramToken: process.env['TELEGRAM_BOT_TOKEN'] ?? '',
     telegramChatId: process.env['TELEGRAM_ALLOWED_CHAT_ID'] ?? '',
     hasModelKey: Boolean(process.env['ANTHROPIC_API_KEY']),

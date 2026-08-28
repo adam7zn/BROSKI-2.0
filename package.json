@@ -14,7 +14,8 @@
     "test": "npm run test --workspaces --if-present",
     "chat": "npm run chat --workspace @msc/companion",
     "telegram": "npm run telegram --workspace @msc/companion",
-    "inspect": "npm run inspect --workspace @msc/companion"
+    "inspect": "npm run inspect --workspace @msc/companion",
+    "plan": "npm run plan --workspace @msc/companion"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

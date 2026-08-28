@@ -1,19 +1,43 @@
 import type { BackendContext } from '../contracts.js';
 import { checkAnswer } from './answer-check.js';
 import {
-  type EvaluateInput,
-  type EvaluatedReply,
+  MAX_HINTS,
+  type AgentTurn,
   type GeneratedQuestion,
+  type RespondInput,
   type StudyAgent,
 } from './types.js';
+
+const META = {
+  agent: 'scripted',
+  promptVersion: 'scripted/2026-08-28.2',
+  model: null,
+} as const;
+
+/** Phrases that mean "I need help" rather than "here is my answer". */
+const STUCK = [
+  'hint',
+  'ledtråd',
+  'tips',
+  'hjälp',
+  'help',
+  'vet inte',
+  'vet ej',
+  'ingen aning',
+  'fattar inte',
+  'förstår inte',
+  'kan inte',
+  '?',
+];
 
 /**
  * A deterministic stand-in for the model-backed agent.
  *
- * It exists so the whole loop — messaging, correlation, storage — can be run
- * and tested without network access or an API key (`docs/RULES.md` §6.3). It
- * generates a linear equation with a known integer solution, whatever the topic
- * says, so it is a fixture, not a study agent. Never point a real student at it.
+ * It exists so the whole loop — messaging, hints, correlation, storage — can be
+ * run and tested without network access or an API key (`docs/RULES.md` §6.3).
+ * It generates a linear equation with a known integer solution whatever the
+ * topic says, so it is a fixture, not a study agent. Never point a real student
+ * at it.
  */
 export class ScriptedStudyAgent implements StudyAgent {
   async askQuestion(context: BackendContext): Promise<GeneratedQuestion> {
@@ -33,58 +57,77 @@ export class ScriptedStudyAgent implements StudyAgent {
       question,
       expectedAnswer: String(x),
       rubric: `A correct reply gives x = ${x}, however it is written.`,
-      meta: {
-        agent: 'scripted',
-        promptVersion: 'scripted/2026-08-28.1',
-        model: null,
-      },
+      meta: { ...META },
     };
   }
 
-  async evaluate(input: EvaluateInput): Promise<EvaluatedReply> {
-    const verdict = checkAnswer(
-      input.question.expectedAnswer,
-      input.studentReply,
-    );
+  async respond(input: RespondInput): Promise<AgentTurn> {
+    const latest = input.transcript.at(-1)?.text ?? '';
     const expected = input.question.expectedAnswer ?? '?';
+    const verdict = checkAnswer(input.question.expectedAnswer, latest);
 
     if (verdict === 'match') {
-      return this.#reply('correct', `Correct — x = ${expected}.`, 1, true);
+      return turn('feedback', `Correct — x = ${expected}.`, 'correct', 1, true);
     }
+
     if (verdict === 'mismatch') {
-      return this.#reply(
+      return turn(
+        'feedback',
+        `Not quite — x = ${expected}. Undo the addition first, then the multiplication.`,
         'incorrect',
-        `Not quite — the answer is x = ${expected}. Undo the addition first, then the multiplication.`,
         1,
         true,
       );
     }
-    return this.#reply(
+
+    const asksForHelp = STUCK.some((phrase) =>
+      latest.toLowerCase().includes(phrase),
+    );
+
+    if (input.canContinue && asksForHelp && input.hintsGiven < MAX_HINTS) {
+      const hint =
+        input.hintsGiven === 0
+          ? 'Start by getting the number away from the x-term — do the same thing on both sides.'
+          : 'Now you have something times x on its own. Divide both sides by that number.';
+      return turn('hint', hint, null, 0.5, false);
+    }
+
+    if (input.canContinue) {
+      return turn(
+        'clarify',
+        'I could not read that as an answer. What did you get for x?',
+        null,
+        0.3,
+        false,
+      );
+    }
+
+    return turn(
+      'feedback',
+      `Let's leave it there — x = ${expected}. Subtract first, then divide.`,
       'unclear',
-      'I could not read that as an answer. What did you get for x?',
       0.3,
       false,
     );
   }
+}
 
-  #reply(
-    result: EvaluatedReply['result'],
-    feedback: string,
-    confidence: number,
-    deterministic: boolean,
-  ): EvaluatedReply {
-    return {
-      result,
-      feedback,
-      confidence,
-      deterministic,
-      meta: {
-        agent: 'scripted',
-        promptVersion: 'scripted/2026-08-28.1',
-        model: null,
-      },
-    };
-  }
+function turn(
+  intent: AgentTurn['intent'],
+  message: string,
+  result: AgentTurn['result'],
+  confidence: number,
+  deterministic: boolean,
+): AgentTurn {
+  return {
+    intent,
+    message,
+    status: intent === 'feedback' ? 'resolved' : 'waiting',
+    result,
+    confidence,
+    deterministic,
+    meta: { ...META },
+  };
 }
 
 /** FNV-1a, so the same interaction always produces the same question. */

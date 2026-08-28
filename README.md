@@ -67,7 +67,8 @@ Requires Node 22 or later.
 
 ```bash
 npm install
-npm run chat      # the whole loop in a terminal, no accounts needed
+npm run plan      # what it would do for the next week, and why — sends nothing
+npm run chat      # the whole conversation in a terminal, no accounts needed
 npm run inspect   # what was asked, answered, and judged
 npm test
 ```
@@ -115,20 +116,48 @@ it right for trying the loop and wrong for scheduled nudges.
 4. Put that id in `TELEGRAM_ALLOWED_CHAT_ID`; every other chat is ignored.
 5. `npm run telegram` again to run one interaction, or `-- --loop` to keep serving.
 
-Add `ANTHROPIC_API_KEY` to `.env` for real questions about real material. Edit
-`data/study-plan.json` to point the companion at the actual course content —
-that file is what the questions are built from.
+Add `ANTHROPIC_API_KEY` to `.env` for real questions about real material. Then
+edit the two data files — they are what everything else reasons from:
+`data/study-plan.json` (what the book says) and `data/course-plan.json` (when
+the lessons are, and what each one covers).
 
 Starting an interaction is still manual. Nothing sends on a schedule until the
 quiet hours, caps, and pause controls of [Phase 5](docs/PHASES.md) exist.
 
+### What it decides, and why
+
+Every interaction starts from the date, the course calendar in
+`data/course-plan.json`, and the attempt record — not from a rotation:
+
+| Mode | When | What it asks |
+|---|---|---|
+| `PREPARE` | a lesson starts within 24 hours | the prerequisite that lesson is built on |
+| `PRACTISE` | a lesson ended within 48 hours | whether the central idea stuck |
+| `REVIEW` | otherwise | whatever the record says is due, most overdue first |
+| — | nothing due, no lesson near | nothing at all |
+
+Review intervals come from what he actually answered: doubling while he is
+right (up to 21 days), collapsing to a day when he is wrong, and untouched by an
+answer nobody could read. `npm run plan` prints all of it as sentences, which is
+the same reason the companion shows before it sends anything.
+
+Adding `--force` to `chat` or `telegram` asks something even when the planner
+would stay quiet.
+
+### The conversation
+
+One study item, as many turns as it takes. He can answer, ask for a hint, say he
+is stuck, or write something unreadable; hints escalate and then stop, and only a
+real judgement ends the interaction and becomes an attempt. A hint request is
+never recorded as a wrong answer.
+
 ### Layout
 
 ```text
-packages/conversation/   study agent, messaging adapters, the interaction loop
-packages/backend/        SQLite record, study-item selection
-apps/companion/          runnable entry points: chat, telegram, inspect
-data/                    study plan and the local database
+packages/conversation/   study agent, messaging adapters, the conversation loop
+packages/backend/        SQLite record, course timeline, review scheduling, planner
+apps/companion/          entry points: plan, chat, telegram, inspect
+data/                    study plan, course calendar, and the local database
 fixtures/contracts/      the two boundary payloads
 ```
 

@@ -5,17 +5,21 @@ import { z } from 'zod';
 import type { BackendContext } from '../contracts.js';
 import { checkAnswer, type DeterministicVerdict } from './answer-check.js';
 import {
-  EVALUATION_PROMPT_VERSION,
-  EVALUATION_SYSTEM_PROMPT,
+  MUST_RESOLVE_NOTE,
+  NO_MORE_HINTS_NOTE,
   QUESTION_PROMPT_VERSION,
-  QUESTION_SYSTEM_PROMPT,
+  RESPOND_PROMPT_VERSION,
+  RESPOND_SYSTEM_PROMPT,
+  questionSystemPrompt,
 } from './prompts.js';
 import {
+  MAX_HINTS,
   MIN_CONFIDENCE,
-  type EvaluateInput,
-  type EvaluatedReply,
+  type AgentTurn,
   type GeneratedQuestion,
+  type RespondInput,
   type StudyAgent,
+  type TranscriptEntry,
 } from './types.js';
 
 export const DEFAULT_MODEL = 'claude-opus-5';
@@ -31,14 +35,17 @@ const questionOutputSchema = z.object({
   rubric: z.string().min(1),
 });
 
-const evaluationOutputSchema = z.object({
-  result: z.enum(['correct', 'partially_correct', 'incorrect', 'unclear']),
-  feedback: z.string().min(1),
+const turnOutputSchema = z.object({
+  intent: z.enum(['hint', 'clarify', 'feedback']),
+  message: z.string().min(1),
+  result: z
+    .enum(['correct', 'partially_correct', 'incorrect', 'unclear'])
+    .nullable(),
   confidence: z.number().min(0).max(1),
 });
 
 export class ModelOutputError extends Error {
-  constructor(step: 'askQuestion' | 'evaluate', cause?: unknown) {
+  constructor(step: 'askQuestion' | 'respond', cause?: unknown) {
     super(`The model returned no schema-valid output for ${step}.`);
     this.name = 'ModelOutputError';
     this.cause = cause;
@@ -50,12 +57,7 @@ export interface ClaudeStudyAgentOptions {
   model?: string;
 }
 
-/**
- * The study agent backed by Claude.
- *
- * It stays deliberately small (Phase 1): one question, one evaluation. No
- * tools, no retrieval, no memory, no follow-up turn.
- */
+/** The study agent backed by Claude. */
 export class ClaudeStudyAgent implements StudyAgent {
   readonly #client: Anthropic;
   readonly #model: string;
@@ -73,7 +75,7 @@ export class ClaudeStudyAgent implements StudyAgent {
     const response = await this.#client.messages.parse({
       model: this.#model,
       max_tokens: 2000,
-      system: QUESTION_SYSTEM_PROMPT,
+      system: questionSystemPrompt(context.mode),
       output_config: {
         effort: 'low',
         format: zodOutputFormat(questionOutputSchema),
@@ -84,9 +86,12 @@ export class ClaudeStudyAgent implements StudyAgent {
           content: [
             `Topic: ${context.topic}`,
             `Difficulty: ${context.difficulty}`,
+            context.reason ? `Why now: ${context.reason}` : '',
             'Course material:',
             context.sourceText,
-          ].join('\n'),
+          ]
+            .filter(Boolean)
+            .join('\n'),
         },
       ],
     });
@@ -108,19 +113,27 @@ export class ClaudeStudyAgent implements StudyAgent {
     };
   }
 
-  async evaluate(input: EvaluateInput): Promise<EvaluatedReply> {
+  async respond(input: RespondInput): Promise<AgentTurn> {
+    const latest = input.transcript.at(-1);
     const verdict = checkAnswer(
       input.question.expectedAnswer,
-      input.studentReply,
+      latest?.text ?? '',
     );
+    const hintsSpent = input.hintsGiven >= MAX_HINTS;
 
     const response = await this.#client.messages.parse({
       model: this.#model,
       max_tokens: 4000,
-      system: EVALUATION_SYSTEM_PROMPT,
+      system: [
+        RESPOND_SYSTEM_PROMPT,
+        input.canContinue ? '' : MUST_RESOLVE_NOTE,
+        input.canContinue && hintsSpent ? NO_MORE_HINTS_NOTE : '',
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
       output_config: {
         effort: 'medium',
-        format: zodOutputFormat(evaluationOutputSchema),
+        format: zodOutputFormat(turnOutputSchema),
       },
       messages: [
         {
@@ -132,10 +145,11 @@ export class ClaudeStudyAgent implements StudyAgent {
             `Question asked: ${input.question.question}`,
             `Expected answer: ${input.question.expectedAnswer ?? '(none — judge by rubric)'}`,
             `Rubric: ${input.question.rubric}`,
-            `Deterministic checker: ${describeVerdict(verdict)}`,
+            `Hints already given: ${input.hintsGiven}`,
+            `Deterministic checker on his latest message: ${describeVerdict(verdict)}`,
             '',
-            'His reply, exactly as sent:',
-            input.studentReply,
+            'The conversation so far:',
+            renderTranscript(input.transcript),
           ].join('\n'),
         },
       ],
@@ -143,14 +157,15 @@ export class ClaudeStudyAgent implements StudyAgent {
 
     const parsed = response.parsed_output;
     if (parsed === null || parsed === undefined) {
-      throw new ModelOutputError('evaluate');
+      throw new ModelOutputError('respond');
     }
 
-    // The deterministic check wins on correctness where it has an opinion
-    // (docs/RULES.md §3.2); the model still supplies the wording.
-    let result = parsed.result;
-    let confidence = parsed.confidence;
+    let { intent, result, confidence } = parsed;
+
+    // A message that literally matches the expected answer is an answer,
+    // whatever the model made of it (docs/RULES.md §3.2).
     if (verdict === 'match') {
+      intent = 'feedback';
       result = 'correct';
       confidence = 1;
     } else if (verdict === 'mismatch' && result === 'correct') {
@@ -158,32 +173,48 @@ export class ClaudeStudyAgent implements StudyAgent {
       confidence = 1;
     }
 
-    // Below the threshold the agent reports uncertainty instead of a verdict
-    // (docs/RULES.md §3.7) — a low-confidence guess must not become evidence.
-    if (verdict === 'unknown' && confidence < MIN_CONFIDENCE) {
-      result = 'unclear';
+    if (!input.canContinue) intent = 'feedback';
+    const status = intent === 'feedback' ? 'resolved' : 'waiting';
+
+    if (status === 'resolved') {
+      // Below the threshold the agent reports uncertainty instead of a verdict
+      // (docs/RULES.md §3.7) — a low-confidence guess must not become evidence.
+      result =
+        result === null || (verdict === 'unknown' && confidence < MIN_CONFIDENCE)
+          ? 'unclear'
+          : result;
+    } else {
+      result = null;
     }
 
     return {
+      intent,
+      message: parsed.message.trim(),
+      status,
       result,
-      feedback: parsed.feedback.trim(),
       confidence,
       deterministic: verdict !== 'unknown',
       meta: {
         agent: 'claude',
-        promptVersion: EVALUATION_PROMPT_VERSION,
+        promptVersion: RESPOND_PROMPT_VERSION,
         model: this.#model,
       },
     };
   }
 }
 
+function renderTranscript(transcript: TranscriptEntry[]): string {
+  return transcript
+    .map((entry) => `${entry.role === 'companion' ? 'You' : 'William'}: ${entry.text}`)
+    .join('\n');
+}
+
 function describeVerdict(verdict: DeterministicVerdict): string {
   switch (verdict) {
     case 'match':
-      return 'the reply matches the expected answer exactly. The result is correct.';
+      return 'it matches the expected answer exactly. He is right.';
     case 'mismatch':
-      return 'the reply is a number and it is not the expected one. The result is not correct.';
+      return 'it is a number, and not the expected one. He is not right.';
     case 'unknown':
       return 'no verdict — decide for yourself.';
   }

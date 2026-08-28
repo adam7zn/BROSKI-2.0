@@ -1,30 +1,29 @@
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 import {
   ReplyInbox,
   TelegramMessagingProvider,
   runInteraction,
 } from '@msc/conversation';
 
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
-
 import { describeEnvKeys, readConfig, repoRoot } from './config.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
- * One real interaction over Telegram: send a question, wait for the reply,
- * evaluate it, send feedback, store everything exactly once.
+ * One real conversation over Telegram: ask what the timeline says is worth
+ * asking, talk it through, judge the answer, store everything exactly once.
  *
- * `--loop` keeps serving: after each interaction the companion waits for the
- * student to write anything before starting the next one. Starting is still
- * manual — scheduling and quiet hours belong to a later phase
- * (`docs/PHASES.md` Phase 5), and nothing here sends unprompted.
+ * `--loop` keeps serving after each interaction. `--force` asks even when the
+ * planner would stay quiet. Starting is still manual — scheduling and quiet
+ * hours belong to a later phase (`docs/PHASES.md` Phase 5).
  */
 async function main(): Promise<void> {
   const config = readConfig();
   const keepServing = process.argv.includes('--loop');
+  const force = process.argv.includes('--force');
 
   if (!config.telegramToken) {
-    // Say where it looked and what it found there, so the next step is obvious.
     console.error(
       'TELEGRAM_BOT_TOKEN is missing.\n\n' +
         `Looked in ${resolve(repoRoot, '.env')}\n` +
@@ -60,10 +59,18 @@ async function main(): Promise<void> {
 
   try {
     do {
-      const planned = planNextInteraction(store, config, config.telegramChatId);
+      const planned = planNextInteraction(store, config, config.telegramChatId, {
+        force,
+      });
+
+      if (!planned.context) {
+        console.log(`\nStaying quiet: ${planned.decision.reason}.`);
+        console.log('Run with --force to ask something anyway.');
+        break;
+      }
+
       console.log(
-        `\nAsking about "${planned.item.topic}" — ${planned.reason}.\n` +
-          `Interaction ${planned.context.interactionId}`,
+        `\n[${planned.decision.mode}] ${planned.context.topic} — ${planned.decision.reason}.`,
       );
 
       const outcome = await runInteraction({
@@ -74,23 +81,26 @@ async function main(): Promise<void> {
         inbox,
         replyTimeoutMs: config.replyTimeoutMs,
         signal: controller.signal,
+        onMessage: (entry) => {
+          console.log(
+            `  ${entry.role === 'companion' ? 'companion' : 'william  '}  ${entry.text}`,
+          );
+        },
       });
 
       store.saveOutcome(outcome);
 
       if (outcome.status === 'no_reply') {
-        console.log('No reply within the window. Nothing stored as an attempt.');
+        console.log('  no reply within the window; nothing stored as an attempt.');
         break;
       }
 
-      console.log(`  asked     ${outcome.question.question}`);
-      console.log(`  replied   ${outcome.reply.text}`);
       console.log(
-        `  judged    ${outcome.result.result} ` +
-          `(confidence ${outcome.evaluation.confidence.toFixed(2)}` +
-          `${outcome.evaluation.deterministic ? ', deterministic' : ''})`,
+        `  judged     ${outcome.result.result} ` +
+          `(confidence ${outcome.final.confidence.toFixed(2)}` +
+          `${outcome.final.deterministic ? ', deterministic' : ''}` +
+          `${outcome.trace.hintsGiven ? `, ${outcome.trace.hintsGiven} hint(s)` : ''})`,
       );
-      console.log(`  feedback  ${outcome.evaluation.feedback}`);
 
       if (!keepServing) break;
 

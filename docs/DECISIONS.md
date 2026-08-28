@@ -292,6 +292,47 @@ retrieval needs embeddings.
 
 ---
 
+## ADR-012 — Timeline rules before a learning model
+
+**Status:** ACCEPTED  
+**Date:** 2026-08-28
+
+### Context
+
+ADR-002 requires planning to start from the date. Something has to decide which
+item that produces, and the tempting answer is a model — either a learned
+mastery estimate or asking Claude to choose.
+
+### Decision
+
+Decide with explicit rules over the calendar and the attempt record: prepare
+before a lesson, practise after one, otherwise review what is due, and stay
+quiet when nothing is. Review intervals double on a correct answer, collapse on
+a wrong one, and ignore an unreadable one. The model writes and judges the
+question; it does not choose it.
+
+### Reason
+
+Every decision has to be explainable in one sentence before proactive sending
+is allowed at all (`docs/PHASES.md` Phase 5), and a rule can be read straight
+off the record while a mastery estimate cannot. It also costs nothing to run,
+so `npm run plan` can show a whole week ahead.
+
+### Consequences
+
+- the reason string is part of the contract, not a debug line;
+- `NO_ACTION` is reachable, and reached, without a model call;
+- no mastery percentage is claimed anywhere;
+- richer scheduling stays possible: the raw attempts are all preserved (ADR-005),
+  so any later model can be backfilled from them.
+
+### Revisit when
+
+The pilot shows the intervals are wrong for him, or the item chosen within a
+mode is regularly the wrong one.
+
+---
+
 # ADR template
 
 ```markdown

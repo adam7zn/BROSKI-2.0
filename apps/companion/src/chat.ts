@@ -7,7 +7,7 @@ import { readConfig } from './config.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
- * The whole loop in a terminal, with the messaging provider faked.
+ * The whole conversation in a terminal, with the messaging provider faked.
  *
  * Same code path as Telegram — only the transport differs.
  */
@@ -22,17 +22,35 @@ async function main(): Promise<void> {
   const controller = new AbortController();
   void inbox.pump(messaging, controller.signal);
 
-  // An async iterator rather than `question()`, so a piped stdin (scripts, CI)
-  // behaves the same as a person typing.
   const readline = createInterface({ input: stdin, output: stdout });
-  const lines = readline[Symbol.asyncIterator]();
 
   try {
-    const planned = planNextInteraction(store, config, conversationId);
-    console.log(`\nStudying "${planned.item.topic}" — ${planned.reason}.`);
+    const planned = planNextInteraction(store, config, conversationId, {
+      force: process.argv.includes('--force'),
+    });
+
+    if (!planned.context) {
+      console.log(`\nNothing to send: ${planned.decision.reason}.`);
+      console.log('Run with --force to ask something anyway.');
+      return;
+    }
+
+    console.log(
+      `\n[${planned.decision.mode}] ${planned.context.topic} — ${planned.decision.reason}.`,
+    );
     console.log(`Interaction ${planned.context.interactionId}\n`);
 
-    const interaction = runInteraction({
+    // Everything he types goes to the fake provider as it arrives, so a hint
+    // request or a second attempt reaches the same conversation.
+    void (async () => {
+      for await (const line of readline) {
+        messaging.deliver(conversationId, line);
+      }
+      // Piped input ran out (or he pressed ctrl-D): stop waiting.
+      controller.abort();
+    })();
+
+    const outcome = await runInteraction({
       context: planned.context,
       conversationId,
       agent,
@@ -40,50 +58,31 @@ async function main(): Promise<void> {
       inbox,
       replyTimeoutMs: config.replyTimeoutMs,
       signal: controller.signal,
+      onMessage: (entry) => {
+        if (entry.role === 'companion') {
+          stdout.write(`\nCompanion: ${entry.text}\n\nYou: `);
+        }
+      },
     });
 
-    // Wait for the question to actually be sent before prompting.
-    const question = await waitForSent(messaging, 1);
-    console.log(`Companion: ${question}\n`);
+    store.saveOutcome(outcome);
 
-    stdout.write('You: ');
-    const line = await lines.next();
-    if (line.done) {
-      console.log('\nNo answer given.');
-      controller.abort();
-      return;
-    }
-    messaging.deliver(conversationId, line.value);
-
-    const outcome = await interaction;
     if (outcome.status === 'no_reply') {
       console.log('\nNo reply — nothing was stored as an attempt.');
-      store.saveOutcome(outcome);
       return;
     }
 
-    console.log(`\nCompanion: ${outcome.evaluation.feedback}`);
     console.log(
-      `\n[${outcome.result.result} · confidence ${outcome.evaluation.confidence.toFixed(2)}` +
-        `${outcome.evaluation.deterministic ? ' · deterministic' : ''}]`,
+      `\n[${outcome.result.result} · confidence ${outcome.final.confidence.toFixed(2)}` +
+        `${outcome.final.deterministic ? ' · deterministic' : ''}` +
+        `${outcome.trace.hintsGiven ? ` · ${outcome.trace.hintsGiven} hint(s)` : ''}]`,
     );
-    store.saveOutcome(outcome);
     console.log('Saved. Run "npm run inspect" to see the record.');
   } finally {
     readline.close();
     controller.abort();
     store.close();
   }
-}
-
-async function waitForSent(
-  messaging: FakeMessagingProvider,
-  count: number,
-): Promise<string> {
-  while (messaging.sent.length < count) {
-    await new Promise((resolve) => setTimeout(resolve, 10));
-  }
-  return messaging.sent[count - 1]!.text;
 }
 
 await main();

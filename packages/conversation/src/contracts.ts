@@ -11,6 +11,13 @@ import { z } from 'zod';
 export const difficultySchema = z.enum(['easy', 'medium', 'hard']);
 export type Difficulty = z.infer<typeof difficultySchema>;
 
+/**
+ * Why this interaction is happening, from ADR-003's mode list. It changes what
+ * the agent asks: prime an idea, test a fresh one, or retrieve an old one.
+ */
+export const studyModeSchema = z.enum(['PREPARE', 'PRACTISE', 'REVIEW']);
+export type StudyMode = z.infer<typeof studyModeSchema>;
+
 /** Backend → conversation. Produced by Person B. */
 export const backendContextSchema = z.object({
   interactionId: z.string().min(1),
@@ -18,6 +25,10 @@ export const backendContextSchema = z.object({
   sourceText: z.string().min(1),
   difficulty: difficultySchema,
   image: z.string().url().nullable(),
+  // Added after Phase 0, with defaults, so the original fixture stays valid.
+  mode: studyModeSchema.default('PRACTISE'),
+  /** Plain-language explanation of why now — shown before anything is sent. */
+  reason: z.string().default(''),
 });
 export type BackendContext = z.infer<typeof backendContextSchema>;
 

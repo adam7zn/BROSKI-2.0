@@ -14,12 +14,18 @@ try {
   for (const interaction of interactions) {
     console.log(`\n${interaction.createdAt}  ${interaction.id}`);
     console.log(`  topic     ${interaction.topic} (${interaction.difficulty})`);
+    console.log(`  why       ${interaction.mode}: ${interaction.reason}`);
     console.log(`  status    ${interaction.status}`);
     if (interaction.question) console.log(`  asked     ${interaction.question}`);
     if (interaction.studentReply) console.log(`  replied   ${interaction.studentReply}`);
     if (interaction.result) {
       const confidence = interaction.confidence?.toFixed(2) ?? '—';
-      console.log(`  judged    ${interaction.result} (confidence ${confidence})`);
+      const turns = interaction.studentTurns ?? 1;
+      const hints = interaction.hintsGiven ?? 0;
+      console.log(
+        `  judged    ${interaction.result} (confidence ${confidence}, ` +
+          `${turns} turn(s), ${hints} hint(s))`,
+      );
     }
     if (interaction.feedback) console.log(`  feedback  ${interaction.feedback}`);
   }
