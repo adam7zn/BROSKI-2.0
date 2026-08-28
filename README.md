@@ -81,3 +81,18 @@ backend context
 ```
 
 See [Delivery phases](docs/PHASES.md) for implementation order. The [Initial backlog](docs/INITIAL_BACKLOG.md) is deferred reference material for later phases.
+
+## Development
+
+The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
+
+| Task | Command |
+|---|---|
+| Install dependencies | `pnpm install --frozen-lockfile` |
+| Format files | `pnpm format` |
+| Check formatting | `pnpm format:check` |
+| Lint | `pnpm lint` |
+| Typecheck | `pnpm typecheck` |
+| Run tests | `pnpm test` |
+
+Copy `.env.example` to `.env` when local environment variables are needed. The example contains placeholders only; never commit real credentials.

@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: math_study_companion
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - '127.0.0.1:54329:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d math_study_companion']
+      interval: 2s
+      timeout: 3s
+      retries: 15
+    volumes:
+      - phase1-postgres:/var/lib/postgresql/data
+
+volumes:
+  phase1-postgres:

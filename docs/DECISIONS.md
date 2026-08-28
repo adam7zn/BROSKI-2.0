@@ -15,7 +15,7 @@ Record decisions that would otherwise be repeatedly debated or that constrain mu
 
 ## ADR-001 — One student, one course, one textbook
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
 **Date:** 2026-08-28
 
 ### Decision
@@ -37,7 +37,8 @@ The primary uncertainty is whether the timeline-driven proactive learning loop i
 
 ## ADR-002 — Timeline-first planning
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
+
 **Date:** 2026-08-28
 
 ### Decision
@@ -58,7 +59,8 @@ The differentiator is not generic tutoring; it is remembering previous weeks and
 
 ## ADR-003 — One main study agent with explicit modes
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
+
 **Date:** 2026-08-28
 
 ### Decision
@@ -100,7 +102,8 @@ The data is relational and modest in scale. One operational database reduces com
 
 ## ADR-005 — Raw evidence before derived mastery
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
+
 **Date:** 2026-08-28
 
 ### Decision
@@ -227,3 +230,23 @@ What evidence or scale would justify reconsidering this decision?
 6. Model provider and data-retention settings.
 7. Initial quiet hours and proactive-message cap.
 
+---
+
+## ADR-009 — Minimal TypeScript workspace toolchain
+
+**Status:** ACCEPTED  
+**Date:** 2026-08-28
+
+### Decision
+
+Use pnpm workspaces with Node.js 22, TypeScript, ESLint, Prettier, and Vitest. CI runs one locked install followed by formatting, linting, type checking, and tests.
+
+### Reason
+
+This provides one small, reproducible toolchain for both workstreams without choosing an API framework or adding future-phase infrastructure.
+
+### Consequences
+
+- `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile`;
+- workspace packages share root quality configuration;
+- API framework, database tooling, and deployment remain unresolved.

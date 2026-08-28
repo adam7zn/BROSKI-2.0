@@ -1,0 +1,7 @@
+{
+  "interactionId": "demo-001",
+  "question": "Solve 2x + 3 = 11.",
+  "studentReply": "x = 4",
+  "feedback": "Correct — subtract 3, then divide by 2.",
+  "result": "correct"
+}

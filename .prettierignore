@@ -1,0 +1,9 @@
+node_modules/
+coverage/
+dist/
+pnpm-lock.yaml
+
+# Preserve the project documentation's existing formatting.
+README.md
+docs/
+
