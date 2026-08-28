@@ -76,6 +76,37 @@ npm test
 falls back to a scripted fixture agent that generates drills, so the messaging,
 correlation, and storage paths can be exercised offline.
 
+### Where it runs
+
+A Telegram bot has no behaviour of its own. @BotFather only registers a name and
+hands out a token — the bot stays silent until this code is running somewhere
+and polling Telegram for messages. Nothing runs on Telegram's servers.
+
+So the companion needs a machine that is switched on while the student is
+expected to answer:
+
+| Where | Good for | Not good for |
+|---|---|---|
+| A personal computer | trying it out, curating material | nudges while the machine is asleep |
+| GitHub Codespaces (browser) | a locked-down or school computer | staying awake — it stops when idle |
+| An always-on box: old laptop, Raspberry Pi, small VPS | the real pilot | nothing, this is the destination |
+
+#### From a browser, with GitHub Codespaces
+
+The repository carries a devcontainer, so a codespace boots with Node 22 and the
+dependencies installed. On the repository page: **Code → Codespaces → Create
+codespace on drain**, then in its terminal:
+
+```bash
+npm run chat
+npm run telegram
+```
+
+Put the token and key in **Settings → Codespaces → Secrets** on GitHub rather
+than in a `.env` file; they arrive as environment variables and are never
+committed. A codespace stops after about 30 minutes of inactivity, which makes
+it right for trying the loop and wrong for scheduled nudges.
+
 ### On Telegram
 
 1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token.
