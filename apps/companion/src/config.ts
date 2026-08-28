@@ -11,6 +11,11 @@ export const repoRoot = resolve(
 /**
  * Reads `.env` into `process.env` without overwriting anything already set.
  *
+ * An existing but empty variable counts as unset: a container can declare a
+ * name with no value (a devcontainer mapping a host variable that isn't there,
+ * an unset Codespaces secret), and an empty declaration must not shadow the
+ * `.env` file the person just wrote.
+ *
  * Values stay in the process only — never logged, never sent to a model
  * (`docs/RULES.md` §5.7).
  */
@@ -24,10 +29,25 @@ export function loadEnvFile(path = resolve(repoRoot, '.env')): void {
     if (separator === -1) continue;
     const key = trimmed.slice(0, separator).trim();
     const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, '');
-    if (key && process.env[key] === undefined) {
+    if (key && !process.env[key]) {
       process.env[key] = value;
     }
   }
+}
+
+/** Key names present in `.env`, for diagnostics. Never their values. */
+export function describeEnvKeys(path = resolve(repoRoot, '.env')): string {
+  if (!existsSync(path)) return '';
+  return readFileSync(path, 'utf8')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line !== '' && !line.startsWith('#') && line.includes('='))
+    .map((line) => {
+      const key = line.slice(0, line.indexOf('=')).trim();
+      const length = line.slice(line.indexOf('=') + 1).trim().length;
+      return `${key} (${length} characters)`;
+    })
+    .join(', ');
 }
 
 export interface Config {

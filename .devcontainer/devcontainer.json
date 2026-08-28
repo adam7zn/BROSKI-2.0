@@ -4,12 +4,9 @@
   "postCreateCommand": "npm install",
   "customizations": {
     "vscode": {
-      "extensions": ["dbaeumer.vscode-eslint"]
+      "extensions": [
+        "dbaeumer.vscode-eslint"
+      ]
     }
-  },
-  "remoteEnv": {
-    "TELEGRAM_BOT_TOKEN": "${localEnv:TELEGRAM_BOT_TOKEN}",
-    "TELEGRAM_ALLOWED_CHAT_ID": "${localEnv:TELEGRAM_ALLOWED_CHAT_ID}",
-    "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}"
   }
 }

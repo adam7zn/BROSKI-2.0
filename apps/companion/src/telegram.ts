@@ -4,7 +4,10 @@ import {
   runInteraction,
 } from '@msc/conversation';
 
-import { readConfig } from './config.js';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { describeEnvKeys, readConfig, repoRoot } from './config.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
@@ -21,9 +24,14 @@ async function main(): Promise<void> {
   const keepServing = process.argv.includes('--loop');
 
   if (!config.telegramToken) {
+    // Say where it looked and what it found there, so the next step is obvious.
     console.error(
-      'TELEGRAM_BOT_TOKEN is missing. Create a bot with @BotFather, then put the\n' +
-        'token in .env (see .env.example).',
+      'TELEGRAM_BOT_TOKEN is missing.\n\n' +
+        `Looked in ${resolve(repoRoot, '.env')}\n` +
+        `  that file ${existsSync(resolve(repoRoot, '.env')) ? 'exists' : 'does not exist yet'}\n` +
+        `  keys found in it: ${describeEnvKeys() || '(none)'}\n\n` +
+        'Create a bot with @BotFather, then write its token to .env like this:\n' +
+        "  echo 'TELEGRAM_BOT_TOKEN=paste-the-token-here' > .env",
     );
     process.exitCode = 1;
     return;
