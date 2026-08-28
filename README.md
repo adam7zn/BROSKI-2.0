@@ -61,23 +61,59 @@ The first version supports:
 
 It does not initially support multiple schools, a general textbook marketplace, every subject, high-stakes grading, or fully autonomous messaging without a shadow-mode pilot.
 
-## Two-person team workstreams
+## Running it
 
-- **Person A — Conversation:** messaging, conversation state, and one simple question-and-feedback agent.
-- **Person B — Platform and visuals:** backend, database, APIs, images, files, logs, and deployment.
+Requires Node 22 or later.
 
-The first phases use only two shared payloads so both people can build independently with fixtures. [Delivery phases](docs/PHASES.md) is the source of truth for current work. [Team ownership](docs/TEAM_OWNERSHIP.md) records broader responsibilities that may become useful after the first real-message loop works.
+```bash
+npm install
+npm run chat      # the whole loop in a terminal, no accounts needed
+npm run inspect   # what was asked, answered, and judged
+npm test
+```
+
+`npm run chat` works with no credentials at all: without `ANTHROPIC_API_KEY` it
+falls back to a scripted fixture agent that generates drills, so the messaging,
+correlation, and storage paths can be exercised offline.
+
+### On Telegram
+
+1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token.
+2. `cp .env.example .env` and paste the token into `TELEGRAM_BOT_TOKEN`.
+3. `npm run telegram` — it prints the chat id of whoever writes to the bot.
+4. Put that id in `TELEGRAM_ALLOWED_CHAT_ID`; every other chat is ignored.
+5. `npm run telegram` again to run one interaction, or `-- --loop` to keep serving.
+
+Add `ANTHROPIC_API_KEY` to `.env` for real questions about real material. Edit
+`data/study-plan.json` to point the companion at the actual course content —
+that file is what the questions are built from.
+
+Starting an interaction is still manual. Nothing sends on a schedule until the
+quiet hours, caps, and pause controls of [Phase 5](docs/PHASES.md) exist.
+
+### Layout
+
+```text
+packages/conversation/   study agent, messaging adapters, the interaction loop
+packages/backend/        SQLite record, study-item selection
+apps/companion/          runnable entry points: chat, telegram, inspect
+data/                    study plan and the local database
+fixtures/contracts/      the two boundary payloads
+```
 
 ## Current milestone
 
-First prove each half independently, then connect this manually triggered loop:
+This manually triggered loop runs today, in a terminal and on Telegram:
 
 ```text
-backend context
-→ one simple question
+study plan
+→ one question
 → student reply
+→ deterministic check, then model judgement
 → useful feedback
 → saved interaction
 ```
 
-See [Delivery phases](docs/PHASES.md) for implementation order. The [Initial backlog](docs/INITIAL_BACKLOG.md) is deferred reference material for later phases.
+Next: real course material in `data/study-plan.json`, then the timing work in
+[Phase 5](docs/PHASES.md). The [Initial backlog](docs/INITIAL_BACKLOG.md) is
+deferred reference material for later phases.

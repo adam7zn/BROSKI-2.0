@@ -1,0 +1,12 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Local pilot data: real questions and real answers from a real student.
+data/*.db
+data/*.db-wal
+data/*.db-shm

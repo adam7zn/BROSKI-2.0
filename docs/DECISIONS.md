@@ -182,6 +182,116 @@ A wrong or annoying proactive message is more damaging than a poor answer to a u
 
 ---
 
+## ADR-009 — Telegram as the first messaging provider
+
+**Status:** ACCEPTED  
+**Date:** 2026-08-28
+
+### Context
+
+The companion's defining behaviour is proactive: a question before a lesson, a
+retrieval prompt days after one. The provider must therefore allow a
+free-form message the student did not ask for.
+
+### Options considered
+
+1. WhatsApp Cloud API
+2. Telegram Bot API
+3. An iMessage bridge on a Mac
+
+### Decision
+
+Telegram Bot API, behind the `MessagingProvider` interface of ADR-006.
+
+### Reason
+
+WhatsApp only allows free-form business messages inside a 24-hour window opened
+by the student. Every proactive nudge outside it needs a pre-approved Meta
+template, which makes the product's central behaviour a template-approval
+problem. It also requires business verification, a dedicated number, and a
+public HTTPS webhook.
+
+Telegram has no such window, needs no verification, and supports long polling —
+so real messages work from a laptop before anything is deployed.
+
+### Consequences
+
+- proactive sending is a product decision, not a provider negotiation;
+- long polling now, webhook later, with `normalizeTelegramUpdate` as the shared
+  inbound contract;
+- WhatsApp or iMessage remain possible as additional adapters;
+- the bot must ignore group chats and any chat id other than the pilot's.
+
+### Revisit when
+
+The student would rather use another app, or the pilot needs more than one
+recipient.
+
+---
+
+## ADR-010 — Claude for question generation and evaluation
+
+**Status:** ACCEPTED  
+**Date:** 2026-08-28
+
+### Decision
+
+Use the Anthropic Messages API (`claude-opus-5` by default, overridable with
+`MSC_MODEL`) through one adapter, with structured outputs validated by a runtime
+schema, and a deterministic scripted agent as the offline fallback.
+
+### Reason
+
+Judging a student's *method* is the part of the loop a rule engine cannot do.
+Structured outputs keep model responses inside a schema, which is what
+`docs/RULES.md` §3.1 requires, and the answer check in front of it means simple
+arithmetic never depends on the model being right.
+
+### Consequences
+
+- an API key is the only credential the agent needs, read from the environment;
+- prompt and model versions are recorded with every run;
+- the whole loop still runs, and is tested, with no key present;
+- cost per interaction is two short calls.
+
+### Revisit when
+
+Evaluation quality is measured against the golden cases, or cost per interaction
+matters more than judgement quality.
+
+---
+
+## ADR-011 — SQLite for the pilot, PostgreSQL when it leaves the laptop
+
+**Status:** ACCEPTED  
+**Date:** 2026-08-28
+
+### Decision
+
+Store interactions, attempts, and the send ledger in a local SQLite file
+(`node:sqlite`, no dependency). Keep the column shapes aligned with
+`docs/DATA_MODEL.md` so the move to PostgreSQL (ADR-004) is a migration.
+
+### Reason
+
+One student on one laptop does not need a database server, and needing one is
+enough friction to stop the pilot from running at all. Nothing in the schema
+depends on SQLite.
+
+### Consequences
+
+- the pilot runs with `npm install` and nothing else;
+- no `pgvector`, so semantic retrieval waits for the PostgreSQL move;
+- the database file holds real answers from a real student and is git-ignored;
+- ADR-004 stands for the hosted deployment.
+
+### Revisit when
+
+The companion runs somewhere other than a personal machine, or textbook
+retrieval needs embeddings.
+
+---
+
 # ADR template
 
 ```markdown
@@ -217,13 +327,16 @@ Positive and negative consequences, migration needs, and review trigger.
 What evidence or scale would justify reconsidering this decision?
 ```
 
-## Decisions still required before Phase 1 implementation
+## Decisions still open
 
-1. Exact API framework.
-2. Hosting provider and environment strategy.
-3. First messaging provider/bridge after a spike.
-4. Textbook extraction toolchain.
-5. Deterministic symbolic mathematics strategy for the current chapter.
-6. Model provider and data-retention settings.
-7. Initial quiet hours and proactive-message cap.
+Settled since: the messaging provider (ADR-009), the model provider (ADR-010),
+and pilot storage (ADR-011). No HTTP framework is needed yet — the runners are
+CLI processes, and the API server arrives with deployment.
+
+1. Hosting provider and environment strategy, once sending leaves the laptop.
+2. Textbook extraction toolchain.
+3. Deterministic symbolic mathematics beyond the current answer checker.
+4. Model data-retention settings.
+5. Initial quiet hours and proactive-message cap — required before anything is
+   sent on a schedule.
 

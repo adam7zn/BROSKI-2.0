@@ -1,0 +1,24 @@
+{
+  "name": "math-study-companion",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "typecheck": "tsc --build",
+    "test": "npm run test --workspaces --if-present",
+    "chat": "npm run chat --workspace @msc/companion",
+    "telegram": "npm run telegram --workspace @msc/companion",
+    "inspect": "npm run inspect --workspace @msc/companion"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@msc/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Storage, study-item selection, and the interaction record.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@msc/conversation": "*",
+    "zod": "^4.5.1"
+  }
+}

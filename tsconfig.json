@@ -1,0 +1,8 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/conversation" },
+    { "path": "packages/backend" },
+    { "path": "apps/companion" }
+  ]
+}
