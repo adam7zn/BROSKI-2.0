@@ -30,13 +30,26 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
   #counter = 0;
 
   async sendMessage(input: OutboundText): Promise<SendResult> {
-    return this.#send('text', input.conversationId, input.text, input.idempotencyKey);
+    return this.#send(
+      'text',
+      input.conversationId,
+      input.text,
+      input.idempotencyKey,
+    );
   }
 
   async sendImage(input: OutboundImage): Promise<SendResult> {
     const text = input.caption ?? input.altText;
-    return this.#send('image', input.conversationId, text, input.idempotencyKey);
+    return this.#send(
+      'image',
+      input.conversationId,
+      text,
+      input.idempotencyKey,
+    );
   }
+
+  /** Where a delivered reply appears to come from. */
+  senderAddress = 'fake-student';
 
   /** Simulates the student sending a reply. */
   deliver(conversationId: string, text: string): InboundMessageEvent {
@@ -46,6 +59,7 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
       providerEventId: `fake-event-${this.#counter}`,
       providerMessageId: `fake-message-${this.#counter}`,
       providerConversationId: conversationId,
+      senderAddress: this.senderAddress,
       text,
       receivedAt: new Date().toISOString(),
     };
@@ -54,7 +68,9 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
     return event;
   }
 
-  async *listen(options: { signal?: AbortSignal } = {}): AsyncIterable<InboundMessageEvent> {
+  async *listen(
+    options: { signal?: AbortSignal } = {},
+  ): AsyncIterable<InboundMessageEvent> {
     while (!options.signal?.aborted) {
       const next = this.#queue.shift();
       if (next) {
@@ -63,7 +79,9 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
       }
       await new Promise<void>((resolve) => {
         this.#waiting = resolve;
-        options.signal?.addEventListener('abort', () => resolve(), { once: true });
+        options.signal?.addEventListener('abort', () => resolve(), {
+          once: true,
+        });
       });
       this.#waiting = null;
     }

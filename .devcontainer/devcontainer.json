@@ -1,7 +1,7 @@
 {
   "name": "Math Study Companion",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:1-22-bookworm",
-  "postCreateCommand": "npm install",
+  "postCreateCommand": "corepack enable && pnpm install --frozen-lockfile",
   "customizations": {
     "vscode": {
       "extensions": [

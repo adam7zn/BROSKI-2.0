@@ -1,8 +1,15 @@
 {
-  "files": [],
-  "references": [
-    { "path": "packages/conversation" },
-    { "path": "packages/backend" },
-    { "path": "apps/companion" }
-  ]
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": [
+    "apps/**/*.ts",
+    "packages/**/*.ts",
+    "tests/**/*.ts",
+    "eslint.config.js",
+    "vitest.config.ts"
+  ],
+  "exclude": ["**/coverage/**", "**/dist/**", "**/node_modules/**"]
 }

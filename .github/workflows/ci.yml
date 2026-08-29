@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: postgresql://postgres@127.0.0.1:54329/math_study_companion
+      TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:54329/math_study_companion
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: math_study_companion
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d math_study_companion"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run migrations
+        run: pnpm db:migrate
+
+      - name: Run full check
+        run: pnpm check
+
+      - name: Build API
+        run: pnpm --filter @math-study-companion/api build

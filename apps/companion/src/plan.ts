@@ -3,7 +3,7 @@ import {
   loadStudyPlan,
   planStudySession,
   reviewStates,
-} from '@msc/backend';
+} from '@math-study-companion/planning';
 
 import { readConfig } from './config.js';
 import { openStore } from './wire.js';
@@ -23,7 +23,9 @@ try {
   const history = store.attemptHistory();
   const reviews = reviewStates(history);
 
-  console.log(`\n${plan.courseName} — ${items.length} study items, ${plan.lessons.length} lessons`);
+  console.log(
+    `\n${plan.courseName} — ${items.length} study items, ${plan.lessons.length} lessons`,
+  );
   console.log(`${history.length} attempts on record\n`);
 
   const now = new Date();

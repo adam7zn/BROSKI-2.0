@@ -1,5 +1,6 @@
 import {
   IdempotencyLedger,
+  UnsupportedMediaError,
   type InboundMessageEvent,
   type InboundSource,
   type MessagingProvider,
@@ -43,6 +44,7 @@ export interface TelegramUpdate {
     message_id: number;
     date: number;
     text?: string;
+    from?: { id: number };
     chat: { id: number; type: string };
   };
 }
@@ -63,6 +65,7 @@ export function normalizeTelegramUpdate(
     providerEventId: String(update.update_id),
     providerMessageId: String(message.message_id),
     providerConversationId: String(message.chat.id),
+    senderAddress: String(message.from?.id ?? message.chat.id),
     text: message.text,
     receivedAt: new Date(message.date * 1000).toISOString(),
   };
@@ -75,7 +78,9 @@ export function normalizeTelegramUpdate(
  * class serves a webhook deployment later: `normalizeTelegramUpdate` is the
  * whole inbound contract.
  */
-export class TelegramMessagingProvider implements MessagingProvider, InboundSource {
+export class TelegramMessagingProvider
+  implements MessagingProvider, InboundSource
+{
   readonly name = 'telegram';
 
   readonly #token: string;
@@ -118,9 +123,14 @@ export class TelegramMessagingProvider implements MessagingProvider, InboundSour
     const existing = this.#ledger.get(input.idempotencyKey);
     if (existing) return { ...existing, deduplicated: true };
 
+    if (input.media.kind !== 'url') {
+      // Sending a local file needs a multipart upload, which nothing asks for
+      // yet; failing loudly beats silently sending nothing.
+      throw new UnsupportedMediaError(this.name, input.media.kind);
+    }
     const result = await this.#call<{ message_id: number }>('sendPhoto', {
       chat_id: input.conversationId,
-      photo: input.mediaUrl,
+      photo: input.media.url,
       caption: input.caption ?? input.altText,
     });
     return this.#ledger.remember(input.idempotencyKey, {
@@ -179,12 +189,15 @@ export class TelegramMessagingProvider implements MessagingProvider, InboundSour
     body: Record<string, unknown>,
     timeoutMs = 20_000,
   ): Promise<T> {
-    const response = await this.#fetch(`${API_ROOT}/bot${this.#token}/${method}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const response = await this.#fetch(
+      `${API_ROOT}/bot${this.#token}/${method}`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      },
+    );
 
     const payload = (await response.json()) as {
       ok: boolean;

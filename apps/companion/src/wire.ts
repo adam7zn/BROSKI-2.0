@@ -4,18 +4,18 @@ import {
   backendContextSchema,
   type BackendContext,
   type StudyAgent,
-} from '@msc/conversation';
+} from '@math-study-companion/conversation';
 import {
-  InteractionStore,
   loadCoursePlan,
   loadStudyPlan,
   planStudySession,
   reviewStates,
   type PlanDecision,
   type StudyItem,
-} from '@msc/backend';
+} from '@math-study-companion/planning';
 import { randomUUID } from 'node:crypto';
 
+import { InteractionStore } from './local-store.js';
 import type { Config } from './config.js';
 
 export function buildAgent(config: Config): StudyAgent {
@@ -80,7 +80,12 @@ export function planNextInteraction(
     reason: decision.reason,
   });
 
-  store.planInteraction(context, conversationId, decision.item.id, decision.lessonId);
+  store.planInteraction(
+    context,
+    conversationId,
+    decision.item.id,
+    decision.lessonId,
+  );
   return { decision, context, item: decision.item };
 }
 

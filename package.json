@@ -1,25 +1,50 @@
 {
   "name": "math-study-companion",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "typecheck": "tsc --build",
-    "test": "npm run test --workspaces --if-present",
-    "chat": "npm run chat --workspace @msc/companion",
-    "telegram": "npm run telegram --workspace @msc/companion",
-    "inspect": "npm run inspect --workspace @msc/companion",
-    "plan": "npm run plan --workspace @msc/companion"
+    "api:start": "pnpm --filter @math-study-companion/api start",
+    "admin:dev": "pnpm --filter @math-study-companion/admin dev",
+    "admin:build": "pnpm --filter @math-study-companion/admin build",
+    "review-api:dev": "pnpm --filter @math-study-companion/api review:dev",
+    "extract:chapter": "pnpm --filter @math-study-companion/ingestion extract",
+    "api:start:supabase": "node --env-file-if-exists=.env.supabase scripts/with-supabase-db.mjs apps/api/node_modules/.bin/tsx apps/api/dist/src/server.js",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "db:down": "pnpm --filter @math-study-companion/database db:down",
+    "db:migrate": "pnpm --filter @math-study-companion/database db:migrate",
+    "db:migrate:supabase": "node --env-file-if-exists=.env.supabase scripts/with-supabase-db.mjs packages/database/node_modules/.bin/tsx packages/database/src/migrate.ts",
+    "db:up": "pnpm --filter @math-study-companion/database db:up",
+    "demo:postgres": "pnpm --filter @math-study-companion/api demo:postgres",
+    "demo:clear:local": "pnpm --filter @math-study-companion/api demo:clear --",
+    "demo:imessage": "node --env-file-if-exists=.env.imessage.local apps/companion/node_modules/tsx/dist/cli.mjs apps/companion/src/imessage-demo.ts",
+    "demo:supabase": "node --env-file-if-exists=.env.supabase apps/api/node_modules/tsx/dist/cli.mjs apps/api/src/demo-postgres.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "pnpm test:unit && pnpm test:postgres",
+    "test:postgres": "pnpm --filter @math-study-companion/database test && pnpm --filter @math-study-companion/api test:postgres",
+    "test:unit": "vitest run && pnpm --filter @math-study-companion/api test:unit && pnpm --filter @math-study-companion/conversation test && pnpm --filter @math-study-companion/planning test && pnpm --filter @math-study-companion/companion test",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "plan": "pnpm --filter @math-study-companion/companion plan",
+    "chat": "pnpm --filter @math-study-companion/companion chat",
+    "telegram": "pnpm --filter @math-study-companion/companion telegram",
+    "inspect": "pnpm --filter @math-study-companion/companion inspect"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.20.1",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.68.0",
+    "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.122.0"
   }
 }

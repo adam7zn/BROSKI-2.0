@@ -61,68 +61,34 @@ The first version supports:
 
 It does not initially support multiple schools, a general textbook marketplace, every subject, high-stakes grading, or fully autonomous messaging without a shadow-mode pilot.
 
-## Running it
+## Layout
 
-Requires Node 22 or later.
-
-```bash
-npm install
-npm run plan      # what it would do for the next week, and why — sends nothing
-npm run chat      # the whole conversation in a terminal, no accounts needed
-npm run inspect   # what was asked, answered, and judged
-npm test
+```text
+packages/contracts/      the payloads that cross every boundary
+packages/database/       PostgreSQL migrations and repositories
+packages/ingestion/      textbook extraction (Apple Vision + pix2tex)
+packages/conversation/   study agent, messaging adapters, the conversation loop
+packages/planning/       course timeline, review scheduling, the study planner
+apps/api/                HTTP API and the review endpoints
+apps/admin/              content review UI
+apps/companion/          runnable entry points: plan, chat, telegram, imessage
 ```
 
-`npm run chat` works with no credentials at all: without `ANTHROPIC_API_KEY` it
-falls back to a scripted fixture agent that generates drills, so the messaging,
-correlation, and storage paths can be exercised offline.
+## The study loop
 
-### Where it runs
-
-A Telegram bot has no behaviour of its own. @BotFather only registers a name and
-hands out a token — the bot stays silent until this code is running somewhere
-and polling Telegram for messages. Nothing runs on Telegram's servers.
-
-So the companion needs a machine that is switched on while the student is
-expected to answer:
-
-| Where | Good for | Not good for |
-|---|---|---|
-| A personal computer | trying it out, curating material | nudges while the machine is asleep |
-| GitHub Codespaces (browser) | a locked-down or school computer | staying awake — it stops when idle |
-| An always-on box: old laptop, Raspberry Pi, small VPS | the real pilot | nothing, this is the destination |
-
-#### From a browser, with GitHub Codespaces
-
-The repository carries a devcontainer, so a codespace boots with Node 22 and the
-dependencies installed. On the repository page: **Code → Codespaces → Create
-codespace on drain**, then in its terminal:
+Two paths run today. The judge demo is the canonical one, scripted end to end
+over iMessage and PostgreSQL. The agent path is the product one:
 
 ```bash
-npm run chat
-npm run telegram
+pnpm plan      # what it would do for the next week, and why — sends nothing
+pnpm chat      # the whole conversation in a terminal, no accounts needed
+pnpm telegram  # the same conversation over Telegram
+pnpm inspect   # what was asked, answered, and judged
 ```
 
-Put the token and key in **Settings → Codespaces → Secrets** on GitHub rather
-than in a `.env` file; they arrive as environment variables and are never
-committed. A codespace stops after about 30 minutes of inactivity, which makes
-it right for trying the loop and wrong for scheduled nudges.
-
-### On Telegram
-
-1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token.
-2. `cp .env.example .env` and paste the token into `TELEGRAM_BOT_TOKEN`.
-3. `npm run telegram` — it prints the chat id of whoever writes to the bot.
-4. Put that id in `TELEGRAM_ALLOWED_CHAT_ID`; every other chat is ignored.
-5. `npm run telegram` again to run one interaction, or `-- --loop` to keep serving.
-
-Add `ANTHROPIC_API_KEY` to `.env` for real questions about real material. Then
-edit the two data files — they are what everything else reasons from:
-`data/study-plan.json` (what the book says) and `data/course-plan.json` (when
-the lessons are, and what each one covers).
-
-Starting an interaction is still manual. Nothing sends on a schedule until the
-quiet hours, caps, and pause controls of [Phase 5](docs/PHASES.md) exist.
+`pnpm chat` works with no credentials at all: without `ANTHROPIC_API_KEY` it
+falls back to a scripted fixture agent, so messaging, correlation, and storage
+can be exercised offline.
 
 ### What it decides, and why
 
@@ -138,42 +104,120 @@ Every interaction starts from the date, the course calendar in
 
 Review intervals come from what he actually answered: doubling while he is
 right (up to 21 days), collapsing to a day when he is wrong, and untouched by an
-answer nobody could read. `npm run plan` prints all of it as sentences, which is
-the same reason the companion shows before it sends anything.
-
-Adding `--force` to `chat` or `telegram` asks something even when the planner
-would stay quiet.
+answer nobody could read. `pnpm plan` prints all of it as sentences.
 
 ### The conversation
 
 One study item, as many turns as it takes. He can answer, ask for a hint, say he
-is stuck, or write something unreadable; hints escalate and then stop, and only a
-real judgement ends the interaction and becomes an attempt. A hint request is
+is stuck, or write something unreadable; hints escalate and then stop, and only
+a real judgement ends the interaction and becomes an attempt. A hint request is
 never recorded as a wrong answer.
 
-### Layout
+### On Telegram
 
-```text
-packages/conversation/   study agent, messaging adapters, the conversation loop
-packages/backend/        SQLite record, course timeline, review scheduling, planner
-apps/companion/          entry points: plan, chat, telegram, inspect
-data/                    study plan, course calendar, and the local database
-fixtures/contracts/      the two boundary payloads
-```
+1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, and copy the token.
+2. `cp .env.example .env` and paste the token into `TELEGRAM_BOT_TOKEN`.
+3. `pnpm telegram` — it prints the chat id of whoever writes to the bot.
+4. Put that id in `TELEGRAM_ALLOWED_CHAT_ID`; every other chat is ignored.
+5. `pnpm telegram` again to run one interaction, `-- --loop` to keep serving.
+
+Unlike the iMessage path, this needs no Mac and no awake machine beyond the one
+running the command.
+
+### Known seam
+
+The planner still reads its attempt history from a local SQLite file in
+`apps/companion`, not from PostgreSQL through the API. Both stores are real;
+only PostgreSQL is authoritative. See ADR-014.
 
 ## Current milestone
 
-This manually triggered loop runs today, in a terminal and on Telegram:
+The Platform Phase 1 loop is persisted in Supabase. The active judge MVP connects that same
+canonical interaction to one real iMessage conversation:
 
 ```text
-study plan
-→ one question
+backend context
+→ short onboarding and one simple question
 → student reply
-→ deterministic check, then model judgement
 → useful feedback
-→ saved interaction
+→ saved profile, delivery events, and interaction
 ```
 
-Next: real course material in `data/study-plan.json`, then the timing work in
-[Phase 5](docs/PHASES.md). The [Initial backlog](docs/INITIAL_BACKLOG.md) is
-deferred reference material for later phases.
+See [Delivery phases](docs/PHASES.md) for implementation order. The [Initial backlog](docs/INITIAL_BACKLOG.md) is deferred reference material for later phases.
+
+## Development
+
+The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
+
+| Task | Command |
+|---|---|
+| Install dependencies | `pnpm install --frozen-lockfile` |
+| Format files | `pnpm format` |
+| Check formatting | `pnpm format:check` |
+| Lint | `pnpm lint` |
+| Typecheck | `pnpm typecheck` |
+| Start the local test PostgreSQL | `pnpm db:up` |
+| Apply migrations locally | `pnpm db:migrate` |
+| Run all tests (PostgreSQL must be running) | `pnpm test` |
+| Run every required check | `pnpm check` |
+| Build the API | `pnpm --filter @math-study-companion/api build` |
+| Extract Chapter 1 with Apple Vision | `swift scripts/structured-ocr.swift --input chapter-1 --output chapter-1/extracted/checkpoints` |
+| Assemble structured extraction JSON | `pnpm extract:chapter -- --checkpoints chapter-1/extracted/checkpoints --output chapter-1/extracted/chapter-1-structured.json --pix2tex` |
+| Import structured Chapter 1 content | `pnpm --filter @math-study-companion/database db:import-structured-chapter -- chapter-1/extracted/chapter-1-structured.json` |
+| Start local review API | `ADMIN_TOKEN=<local-token> pnpm review-api:dev` |
+| Start local review UI | `pnpm admin:dev` |
+| Apply migrations to Supabase | `pnpm db:migrate:supabase` |
+| Start the API with Supabase | `pnpm api:start:supabase` |
+| Run the canonical hosted demo | `pnpm demo:supabase` |
+| Clear only the local synthetic fixture | `pnpm demo:clear:local -- --confirm demo-001` |
+| Run the real iMessage demo | `caffeinate -i pnpm demo:imessage` |
+
+The hosted project is `Math Study Companion` (`leknhhxqqehwiaxvzwnt`) in `eu-west-1`. Deployments
+provide its complete `DATABASE_URL` as a secret. For local use, either copy `.env.example` to the
+ignored `.env.supabase` file and replace the password placeholder, or let the hosted scripts read the
+`math-study-companion-supabase-db` item from macOS Keychain. Never commit the password or connection
+URL. The API uses Supabase's IPv4 Session pooler with
+`sslmode=require&uselibpqcompat=true`; local Docker remains the isolated database for tests and CI.
+
+For the hosted Phase 1 Platform demonstration, build the API, run `pnpm db:migrate:supabase`, start
+it with `pnpm api:start:supabase`, and then run `pnpm demo:supabase`. Restart the API and retrieve
+`demo-001` again to confirm persistence. The canonical curl commands are in
+[`apps/api/README.md`](apps/api/README.md).
+
+For isolated checks, run `pnpm db:up`, `pnpm db:migrate`, and `pnpm check`, then stop the disposable
+service with `pnpm db:down`. CI follows this local path and never connects to Supabase.
+
+## Judge iMessage demo
+
+The real-message adapter uses the official
+[`imessage-cli`](https://github.com/beeper/platform-imessage) locally. Sign Messages.app on this Mac
+into the dedicated companion Apple ID and keep the demo phone on a separate identity. Apple
+credentials are never copied into this repository.
+
+```bash
+brew install beeper/tap/imessage-cli
+imessage-cli authorize all
+imessage-cli --json current-user
+cp .env.imessage.example .env.imessage.local
+# Edit only MSC_IMESSAGE_RECIPIENT in the ignored local file.
+
+pnpm db:migrate:supabase
+pnpm --filter @math-study-companion/api build
+pnpm api:start:supabase
+```
+
+With the API still running, use a second terminal. The runner creates a fresh `judge-<UUID>`
+interaction by default so rehearsals never need to delete hosted data:
+
+```bash
+caffeinate -i pnpm demo:imessage
+# Copy interactionId from the runner's final JSON output.
+curl -s http://127.0.0.1:3000/internal/demo/<interactionId> | jq
+curl -s http://127.0.0.1:3000/internal/demo/<interactionId>/events | jq
+curl -s http://127.0.0.1:3000/internal/demo/profile | jq
+```
+
+`MSC_INTERACTION_ID` may pin a readable ID for one clean recording, but it must be unused. The
+cleanup command is deliberately local-only: it refuses non-local database hosts and accepts only
+`demo-001`. Hosted Supabase is never reset, truncated, or used as a test fixture. The live demo is
+manual and single-user; CI uses the fake provider.

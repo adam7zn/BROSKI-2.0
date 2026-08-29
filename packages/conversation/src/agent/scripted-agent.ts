@@ -1,4 +1,4 @@
-import type { BackendContext } from '../contracts.js';
+import { normaliseDifficulty, type BackendContext } from '../contracts.js';
 import { checkAnswer } from './answer-check.js';
 import {
   MAX_HINTS,
@@ -46,10 +46,11 @@ export class ScriptedStudyAgent implements StudyAgent {
     const x = 2 + ((seed >>> 3) % 5); // 2..6
     const b = 1 + ((seed >>> 6) % 7); // 1..7
 
+    const difficulty = normaliseDifficulty(context.difficulty);
     const question =
-      context.difficulty === 'hard'
+      difficulty === 'hard'
         ? `Solve ${a}x + ${b} = ${a - 1}x + ${x + b}.`
-        : context.difficulty === 'medium'
+        : difficulty === 'medium'
           ? `Solve ${a}(x + ${b}) = ${a * (x + b)}.`
           : `Solve ${a}x + ${b} = ${a * x + b}.`;
 

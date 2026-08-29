@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 
-import type { BackendContext } from '../contracts.js';
+import { normaliseDifficulty, type BackendContext } from '../contracts.js';
 import { checkAnswer, type DeterministicVerdict } from './answer-check.js';
 import {
   MUST_RESOLVE_NOTE,
@@ -85,7 +85,7 @@ export class ClaudeStudyAgent implements StudyAgent {
           role: 'user',
           content: [
             `Topic: ${context.topic}`,
-            `Difficulty: ${context.difficulty}`,
+            `Difficulty: ${normaliseDifficulty(context.difficulty)}`,
             context.reason ? `Why now: ${context.reason}` : '',
             'Course material:',
             context.sourceText,
@@ -180,7 +180,8 @@ export class ClaudeStudyAgent implements StudyAgent {
       // Below the threshold the agent reports uncertainty instead of a verdict
       // (docs/RULES.md §3.7) — a low-confidence guess must not become evidence.
       result =
-        result === null || (verdict === 'unknown' && confidence < MIN_CONFIDENCE)
+        result === null ||
+        (verdict === 'unknown' && confidence < MIN_CONFIDENCE)
           ? 'unclear'
           : result;
     } else {
@@ -205,7 +206,10 @@ export class ClaudeStudyAgent implements StudyAgent {
 
 function renderTranscript(transcript: TranscriptEntry[]): string {
   return transcript
-    .map((entry) => `${entry.role === 'companion' ? 'You' : 'William'}: ${entry.text}`)
+    .map(
+      (entry) =>
+        `${entry.role === 'companion' ? 'You' : 'William'}: ${entry.text}`,
+    )
     .join('\n');
 }
 

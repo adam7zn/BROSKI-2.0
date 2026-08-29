@@ -12,9 +12,20 @@ export interface OutboundText {
   idempotencyKey: string;
 }
 
+/**
+ * Where an image comes from.
+ *
+ * The two providers need different things — iMessage sends a file from this
+ * machine, Telegram takes a URL and fetches it itself — and neither can quietly
+ * substitute for the other, so the caller states which one it has and an
+ * adapter rejects what it cannot deliver.
+ */
+export type MediaSource =
+  { kind: 'url'; url: string } | { kind: 'file'; path: string };
+
 export interface OutboundImage {
   conversationId: string;
-  mediaUrl: string;
+  media: MediaSource;
   altText: string;
   caption?: string;
   idempotencyKey: string;
@@ -33,6 +44,8 @@ export interface InboundMessageEvent {
   providerEventId: string;
   providerMessageId: string;
   providerConversationId: string;
+  /** Who sent it, in whatever form the provider identifies people. */
+  senderAddress: string;
   text: string;
   receivedAt: string;
 }
@@ -49,7 +62,17 @@ export interface MessagingProvider {
  * webhook-only deployment does not have to implement polling.
  */
 export interface InboundSource {
-  listen(options?: { signal?: AbortSignal }): AsyncIterable<InboundMessageEvent>;
+  listen(options?: {
+    signal?: AbortSignal;
+  }): AsyncIterable<InboundMessageEvent>;
+}
+
+/** Raised when a provider is handed media it cannot send. */
+export class UnsupportedMediaError extends Error {
+  constructor(provider: string, kind: MediaSource['kind']) {
+    super(`The ${provider} adapter cannot send media of kind "${kind}".`);
+    this.name = 'UnsupportedMediaError';
+  }
 }
 
 /** Suppresses repeated sends of the same idempotency key. */

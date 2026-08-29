@@ -16,8 +16,10 @@ try {
     console.log(`  topic     ${interaction.topic} (${interaction.difficulty})`);
     console.log(`  why       ${interaction.mode}: ${interaction.reason}`);
     console.log(`  status    ${interaction.status}`);
-    if (interaction.question) console.log(`  asked     ${interaction.question}`);
-    if (interaction.studentReply) console.log(`  replied   ${interaction.studentReply}`);
+    if (interaction.question)
+      console.log(`  asked     ${interaction.question}`);
+    if (interaction.studentReply)
+      console.log(`  replied   ${interaction.studentReply}`);
     if (interaction.result) {
       const confidence = interaction.confidence?.toFixed(2) ?? '—';
       const turns = interaction.studentTurns ?? 1;
@@ -27,7 +29,8 @@ try {
           `${turns} turn(s), ${hints} hint(s))`,
       );
     }
-    if (interaction.feedback) console.log(`  feedback  ${interaction.feedback}`);
+    if (interaction.feedback)
+      console.log(`  feedback  ${interaction.feedback}`);
   }
 } finally {
   store.close();

@@ -1,18 +1,25 @@
 {
-  "name": "@msc/companion",
+  "name": "@math-study-companion/companion",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Runnable companion: local chat, Telegram, and the interaction log.",
   "scripts": {
+    "demo:imessage": "tsx src/imessage-demo.ts",
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "plan": "node --disable-warning=ExperimentalWarning --import tsx src/plan.ts",
     "chat": "node --disable-warning=ExperimentalWarning --import tsx src/chat.ts",
     "telegram": "node --disable-warning=ExperimentalWarning --import tsx src/telegram.ts",
-    "inspect": "node --disable-warning=ExperimentalWarning --import tsx src/inspect.ts",
-    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts",
-    "plan": "node --disable-warning=ExperimentalWarning --import tsx src/plan.ts"
+    "inspect": "node --disable-warning=ExperimentalWarning --import tsx src/inspect.ts"
   },
   "dependencies": {
-    "@msc/backend": "*",
-    "@msc/conversation": "*"
+    "@math-study-companion/contracts": "workspace:*",
+    "@math-study-companion/conversation": "workspace:*",
+    "@math-study-companion/planning": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3"
   }
 }

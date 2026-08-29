@@ -1,0 +1,23 @@
+{
+  "name": "@math-study-companion/planning",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Course timeline, review scheduling, and the study planner.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@math-study-companion/contracts": "workspace:*",
+    "zod": "^4.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3"
+  }
+}

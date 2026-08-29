@@ -1,7 +1,11 @@
 import { createInterface } from 'node:readline/promises';
 import { stdin, stdout } from 'node:process';
 
-import { FakeMessagingProvider, ReplyInbox, runInteraction } from '@msc/conversation';
+import {
+  FakeMessagingProvider,
+  ReplyInbox,
+  runInteraction,
+} from '@math-study-companion/conversation';
 
 import { readConfig } from './config.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
@@ -77,7 +81,7 @@ async function main(): Promise<void> {
         `${outcome.final.deterministic ? ' · deterministic' : ''}` +
         `${outcome.trace.hintsGiven ? ` · ${outcome.trace.hintsGiven} hint(s)` : ''}]`,
     );
-    console.log('Saved. Run "npm run inspect" to see the record.');
+    console.log('Saved. Run "pnpm inspect" to see the record.');
   } finally {
     readline.close();
     controller.abort();

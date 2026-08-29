@@ -5,7 +5,7 @@ import {
   ReplyInbox,
   TelegramMessagingProvider,
   runInteraction,
-} from '@msc/conversation';
+} from '@math-study-companion/conversation';
 
 import { describeEnvKeys, readConfig, repoRoot } from './config.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
@@ -59,9 +59,14 @@ async function main(): Promise<void> {
 
   try {
     do {
-      const planned = planNextInteraction(store, config, config.telegramChatId, {
-        force,
-      });
+      const planned = planNextInteraction(
+        store,
+        config,
+        config.telegramChatId,
+        {
+          force,
+        },
+      );
 
       if (!planned.context) {
         console.log(`\nStaying quiet: ${planned.decision.reason}.`);
@@ -91,7 +96,9 @@ async function main(): Promise<void> {
       store.saveOutcome(outcome);
 
       if (outcome.status === 'no_reply') {
-        console.log('  no reply within the window; nothing stored as an attempt.');
+        console.log(
+          '  no reply within the window; nothing stored as an attempt.',
+        );
         break;
       }
 
@@ -119,7 +126,10 @@ async function main(): Promise<void> {
 }
 
 /** First-run helper: prints the chat id of whoever writes to the bot. */
-async function discoverChatId(token: string, signal: AbortSignal): Promise<void> {
+async function discoverChatId(
+  token: string,
+  signal: AbortSignal,
+): Promise<void> {
   console.log(
     'TELEGRAM_ALLOWED_CHAT_ID is not set.\n' +
       'Open Telegram, send any message to your bot, and the chat id will appear here.\n' +

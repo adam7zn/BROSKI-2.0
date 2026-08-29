@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  normaliseDifficulty,
   parseBackendContext,
   parseConversationResult,
 } from '../src/contracts.js';
@@ -25,21 +26,26 @@ test('the Phase 0 context fixture is a valid backend context', () => {
 });
 
 test('the Phase 0 result fixture is a valid conversation result', () => {
-  const result = parseConversationResult(fixture('conversation-result.example.json'));
+  const result = parseConversationResult(
+    fixture('conversation-result.example.json'),
+  );
   assert.equal(result.interactionId, 'demo-001');
   assert.equal(result.result, 'correct');
 });
 
-test('an unknown difficulty is rejected rather than passed through', () => {
-  assert.throws(() =>
-    parseBackendContext({
-      interactionId: 'x',
-      topic: 't',
-      sourceText: 's',
-      difficulty: 'brutal',
-      image: null,
-    }),
-  );
+test('an unknown difficulty is read as medium rather than as the easiest', () => {
+  // The wire contract accepts any string, so the agent normalises at the point
+  // of use instead of failing a payload the API considers valid.
+  const context = parseBackendContext({
+    interactionId: 'x',
+    topic: 't',
+    sourceText: 's',
+    difficulty: 'brutal',
+    image: null,
+  });
+  assert.equal(context.difficulty, 'brutal');
+  assert.equal(normaliseDifficulty(context.difficulty), 'medium');
+  assert.equal(normaliseDifficulty(' Hard '), 'hard');
 });
 
 test('a missing field is rejected', () => {

@@ -1,0 +1,47 @@
+export {
+  backendToConversationSchema,
+  conversationToBackendSchema,
+  demoInteractionIdSchema,
+  demoMessageDirectionSchema,
+  demoMessageEventInputSchema,
+  demoMessageEventTypeSchema,
+  demoOutboundReservationInputSchema,
+  demoProfileInputSchema,
+  demoSelfAssessedLevelSchema,
+  interactionResultSchema,
+  studyModeSchema,
+} from './contracts.js';
+export type {
+  BackendToConversation,
+  ConversationToBackend,
+  InteractionResult,
+  DemoMessageDirection,
+  DemoMessageEventInput,
+  DemoMessageEventType,
+  DemoOutboundReservationInput,
+  DemoProfileInput,
+  DemoSelfAssessedLevel,
+  StudyMode,
+} from './contracts.js';
+export {
+  blockLayoutInputSchema,
+  blockReviewInputSchema,
+  extractedSourceBlockSchema,
+  extractedSourcePageSchema,
+  sourceBlockTypeSchema,
+  sourceBoundingBoxSchema,
+  sourceCandidateSchema,
+  sourceReviewStateSchema,
+  structuredExtractionSchema,
+} from './source-content.js';
+export type {
+  BlockLayoutInput,
+  BlockReviewInput,
+  ExtractedSourceBlock,
+  ExtractedSourcePage,
+  SourceBlockType,
+  SourceBoundingBox,
+  SourceCandidate,
+  SourceReviewState,
+  StructuredExtraction,
+} from './source-content.js';

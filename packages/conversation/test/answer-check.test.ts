@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { checkAnswer, normalizeAnswer, toNumber } from '../src/agent/answer-check.js';
+import {
+  checkAnswer,
+  normalizeAnswer,
+  toNumber,
+} from '../src/agent/answer-check.js';
 
 test('normalizes the ways a student types the same answer', () => {
   for (const written of ['4', 'x = 4', 'X=4', ' x = 4. ', 'svaret är 4']) {

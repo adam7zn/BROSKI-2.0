@@ -8,7 +8,10 @@ import {
 import type { BackendContext, ConversationResult } from './contracts.js';
 import { conversationResultSchema } from './contracts.js';
 import type { ReplyInbox } from './inbox.js';
-import type { InboundMessageEvent, MessagingProvider } from './messaging/port.js';
+import type {
+  InboundMessageEvent,
+  MessagingProvider,
+} from './messaging/port.js';
 
 export const DEFAULT_REPLY_TIMEOUT_MS = 30 * 60 * 1000;
 /** A follow-up comes faster than a first reply, or not at all. */
@@ -76,7 +79,7 @@ export interface RunInteractionInput {
 export async function runInteraction(
   input: RunInteractionInput,
 ): Promise<InteractionOutcome> {
-  const { context, conversationId, agent, messaging, inbox } = input;
+  const { context, conversationId, agent, messaging } = input;
   const maxStudentTurns = input.maxStudentTurns ?? MAX_STUDENT_TURNS;
   const transcript: TranscriptEntry[] = [];
 
@@ -91,7 +94,7 @@ export async function runInteraction(
   const sent = context.image
     ? await messaging.sendImage({
         conversationId,
-        mediaUrl: context.image,
+        media: { kind: 'url', url: context.image },
         altText: context.topic,
         caption: question.question,
         idempotencyKey: `${context.interactionId}:question`,
@@ -200,15 +203,19 @@ function waitForReply(
     ? (input.replyTimeoutMs ?? DEFAULT_REPLY_TIMEOUT_MS)
     : (input.followUpTimeoutMs ?? DEFAULT_FOLLOW_UP_TIMEOUT_MS);
 
-  const options: { notBefore: Date; timeoutMs: number; signal?: AbortSignal } = {
-    notBefore,
-    timeoutMs,
-  };
+  const options: { notBefore: Date; timeoutMs: number; signal?: AbortSignal } =
+    {
+      notBefore,
+      timeoutMs,
+    };
   if (input.signal) options.signal = input.signal;
   return input.inbox.waitFor(input.conversationId, options);
 }
 
 /** The result payload records what he actually answered, not a hint request. */
 function lastStudentText(transcript: TranscriptEntry[]): string {
-  return [...transcript].reverse().find((entry) => entry.role === 'student')?.text ?? '';
+  return (
+    [...transcript].reverse().find((entry) => entry.role === 'student')?.text ??
+    ''
+  );
 }

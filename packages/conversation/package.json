@@ -1,19 +1,23 @@
 {
-  "name": "@msc/conversation",
+  "name": "@math-study-companion/conversation",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Person A: messaging adapters, conversation state, and the simple study agent.",
   "exports": {
     ".": "./src/index.ts"
   },
   "scripts": {
     "test": "node --import tsx --test test/*.test.ts",
-    "chat": "tsx src/run/local.ts",
-    "telegram": "tsx src/run/telegram.ts"
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@math-study-companion/contracts": "workspace:*",
     "@anthropic-ai/sdk": "^0.122.0",
     "zod": "^4.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3"
   }
 }

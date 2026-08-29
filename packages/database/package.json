@@ -1,0 +1,29 @@
+{
+  "name": "@math-study-companion/database",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:import-chapter": "tsx src/import-chapter.ts",
+    "db:import-structured-chapter": "tsx src/import-structured-chapter.ts",
+    "test": "vitest run --config vitest.config.ts",
+    "test:local": "docker compose up -d --wait && pnpm db:migrate && vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@math-study-companion/contracts": "workspace:*",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "@types/pg": "^8.15.5",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

@@ -28,7 +28,10 @@ export function loadEnvFile(path = resolve(repoRoot, '.env')): void {
     const separator = trimmed.indexOf('=');
     if (separator === -1) continue;
     const key = trimmed.slice(0, separator).trim();
-    const value = trimmed.slice(separator + 1).trim().replace(/^["']|["']$/g, '');
+    const value = trimmed
+      .slice(separator + 1)
+      .trim()
+      .replace(/^["']|["']$/g, '');
     if (key && !process.env[key]) {
       process.env[key] = value;
     }
@@ -41,7 +44,9 @@ export function describeEnvKeys(path = resolve(repoRoot, '.env')): string {
   return readFileSync(path, 'utf8')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#') && line.includes('='))
+    .filter(
+      (line) => line !== '' && !line.startsWith('#') && line.includes('='),
+    )
     .map((line) => {
       const key = line.slice(0, line.indexOf('=')).trim();
       const length = line.slice(line.indexOf('=') + 1).trim().length;
@@ -63,12 +68,19 @@ export interface Config {
 export function readConfig(): Config {
   loadEnvFile();
   return {
-    databasePath: process.env['MSC_DATABASE'] ?? resolve(repoRoot, 'data/companion.db'),
-    studyPlanPath: process.env['MSC_STUDY_PLAN'] ?? resolve(repoRoot, 'data/study-plan.json'),
-    coursePlanPath: process.env['MSC_COURSE_PLAN'] ?? resolve(repoRoot, 'data/course-plan.json'),
+    databasePath:
+      process.env['MSC_DATABASE'] ?? resolve(repoRoot, 'data/companion.db'),
+    studyPlanPath:
+      process.env['MSC_STUDY_PLAN'] ??
+      resolve(repoRoot, 'data/study-plan.json'),
+    coursePlanPath:
+      process.env['MSC_COURSE_PLAN'] ??
+      resolve(repoRoot, 'data/course-plan.json'),
     telegramToken: process.env['TELEGRAM_BOT_TOKEN'] ?? '',
     telegramChatId: process.env['TELEGRAM_ALLOWED_CHAT_ID'] ?? '',
     hasModelKey: Boolean(process.env['ANTHROPIC_API_KEY']),
-    replyTimeoutMs: Number(process.env['MSC_REPLY_TIMEOUT_MS'] ?? 30 * 60 * 1000),
+    replyTimeoutMs: Number(
+      process.env['MSC_REPLY_TIMEOUT_MS'] ?? 30 * 60 * 1000,
+    ),
   };
 }

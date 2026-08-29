@@ -5,7 +5,6 @@ import { ScriptedStudyAgent } from '../src/agent/scripted-agent.js';
 import type {
   AgentTurn,
   GeneratedQuestion,
-  RespondInput,
   StudyAgent,
 } from '../src/agent/types.js';
 import { backendContextSchema, type BackendContext } from '../src/contracts.js';
@@ -245,6 +244,7 @@ test('the same provider event is only processed once', () => {
     providerEventId: '42',
     providerMessageId: '7',
     providerConversationId: CONVERSATION,
+    senderAddress: 'student',
     text: '4',
     receivedAt: new Date().toISOString(),
   };
@@ -293,7 +293,7 @@ test('an agent failure never leaves a half-sent interaction', async () => {
     async askQuestion(): Promise<GeneratedQuestion> {
       throw new Error('model unavailable');
     },
-    async respond(_input: RespondInput): Promise<AgentTurn> {
+    async respond(): Promise<AgentTurn> {
       throw new Error('unreachable');
     },
   };

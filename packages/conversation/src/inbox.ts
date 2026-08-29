@@ -54,6 +54,7 @@ export class ReplyInbox {
       const [event] = buffer.splice(buffered, 1);
       return event!;
     }
+    if (options.signal?.aborted) return null;
 
     return new Promise<InboundMessageEvent | null>((resolve) => {
       const waiter: Waiter = { notBefore, resolve };
@@ -71,7 +72,9 @@ export class ReplyInbox {
 
       const timer = setTimeout(() => settle(null), options.timeoutMs);
       waiter.resolve = (event) => settle(event);
-      options.signal?.addEventListener('abort', () => settle(null), { once: true });
+      options.signal?.addEventListener('abort', () => settle(null), {
+        once: true,
+      });
     });
   }
 

@@ -86,7 +86,10 @@ test('sendMessage posts to the chat and returns the provider message id', async 
   assert.equal(result.providerMessageId, '99');
   assert.equal(result.deduplicated, false);
   assert.equal(calls[0]?.method, 'sendMessage');
-  assert.deepEqual(calls[0]?.body, { chat_id: '555', text: 'Solve 2x + 3 = 11.' });
+  assert.deepEqual(calls[0]?.body, {
+    chat_id: '555',
+    text: 'Solve 2x + 3 = 11.',
+  });
 });
 
 test('a repeated idempotency key never reaches the provider', async () => {
@@ -139,10 +142,7 @@ test('polling yields allowed chats only and advances the offset past every updat
   const { impl, calls } = stubFetch([
     {
       ok: true,
-      result: [
-        textUpdate(10, 999, 'stranger'),
-        textUpdate(11, 555, 'x = 4'),
-      ],
+      result: [textUpdate(10, 999, 'stranger'), textUpdate(11, 555, 'x = 4')],
     },
     { ok: true, result: [] },
   ]);
