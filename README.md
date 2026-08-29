@@ -193,16 +193,26 @@ record, so a cited page always means a page that was really there.
 ### Getting the book in
 
 ```bash
-pnpm index-book data/bok
+pnpm index-book chapter-1
 ```
 
-Every image or PDF in the folder is read once and its text stored. A file named
-`s84.jpg` is cited back as "s. 84". Photographing a page and sending it in
-Telegram adds it the same way, one page at a time.
+Every image and PDF in the folder and below it is read once and its text
+stored. Chapter 1 is 60 scans split across six folders, and they are read in
+page order regardless: `page-006.JPG` is cited back as "s. 6", `page-063.JPG`
+as "s. 63", and a `contents-01.JPG` as "Innehåll 1" rather than as page 1.
 
-The images themselves are never committed. A textbook is copyrighted, and
-`docs/RULES.md` §8 keeps stored source material to what the pilot needs — so
-keep the folder out of git and index it locally.
+Re-running skips pages already read, so a run that dies half way carries on
+where it stopped instead of paying for the whole chapter twice. `--force`
+re-reads everything.
+
+One model call per page, so sixty pages takes a few minutes and a few dollars.
+
+Photographing a page and sending it in Telegram adds it the same way, one page
+at a time.
+
+The scans live in the repository because it is private. In a public one they
+could not: a textbook is copyrighted, and `docs/RULES.md` §8 keeps stored source
+material to what the pilot needs. Only the extracted text goes in the database.
 
 Search is a keyword score, not embeddings: the index is one chapter of one book,
 it has to work with no network, and when it picks the wrong page you can read

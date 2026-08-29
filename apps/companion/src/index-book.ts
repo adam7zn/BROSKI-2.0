@@ -1,35 +1,31 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
+import { basename, extname, relative } from 'node:path';
 
 import {
   ClaudeDocumentReader,
   UnsupportedFileError,
 } from '@math-study-companion/conversation';
 
+import { MIME_BY_EXTENSION, findPages, idFor, labelFor } from './book-files.js';
 import { readConfig } from './config.js';
 import { openStore } from './wire.js';
 
 /**
- * Reads a folder of book pages once, so every later answer can be grounded in
- * them: `pnpm index-book data/bok`.
+ * Reads the pages of the student's book once, so every later answer can be
+ * grounded in them: `pnpm index-book chapter-1`.
  *
- * The images stay where they are. Only the text is stored, and nothing is
- * committed — a textbook is copyrighted, and `docs/RULES.md` §8.2 keeps what is
- * stored to what the pilot needs.
+ * Only the text is stored. The images stay where they are, and re-running skips
+ * pages already read — sixty pages is real money and a long wait, and a run
+ * that dies half way should not start over.
  */
-const MIME_BY_EXTENSION: Record<string, string> = {
-  '.jpg': 'image/jpeg',
-  '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-  '.gif': 'image/gif',
-  '.pdf': 'application/pdf',
-};
+const args = process.argv.slice(2);
+const folder = args.find((arg) => !arg.startsWith('--'));
+const redoEverything = args.includes('--force');
 
-const folder = process.argv[2];
 if (!folder) {
-  console.error('Usage: pnpm index-book <folder>');
-  console.error('  every image or PDF in the folder is read as one page');
+  console.error('Usage: pnpm index-book <folder> [--force]');
+  console.error('  reads every image and PDF in the folder, and below it');
+  console.error('  --force re-reads pages that are already indexed');
   process.exit(1);
 }
 
@@ -43,35 +39,53 @@ const store = openStore(config);
 const reader = new ClaudeDocumentReader();
 
 try {
-  const files = readdirSync(folder)
-    .filter((name) => MIME_BY_EXTENSION[extname(name).toLowerCase()])
-    .sort((a, b) => a.localeCompare(b, 'sv', { numeric: true }));
-
+  const files = findPages(folder);
   if (files.length === 0) {
     console.error(`No images or PDFs in ${folder}.`);
     process.exit(1);
   }
 
-  console.log(`Reading ${files.length} pages from ${folder}…\n`);
+  const alreadyIndexed = new Set(store.bookPages().map((page) => page.id));
+  const todo = redoEverything
+    ? files
+    : files.filter((file) => !alreadyIndexed.has(idFor(folder, file)));
+
+  console.log(`${files.length} pages found in ${folder}.`);
+  if (todo.length < files.length) {
+    console.log(
+      `${files.length - todo.length} already indexed — skipping them. ` +
+        'Use --force to read them again.',
+    );
+  }
+  if (todo.length === 0) {
+    console.log('Nothing to do.');
+    process.exit(0);
+  }
+  console.log(
+    `Reading ${todo.length} pages. This makes one model call per page, so it ` +
+      'takes a few minutes and costs a few dollars.\n',
+  );
+
   let read = 0;
   let skipped = 0;
 
-  for (const name of files) {
-    const path = join(folder, name);
-    const mimeType = MIME_BY_EXTENSION[extname(name).toLowerCase()]!;
-    process.stdout.write(`  ${name.padEnd(34)}`);
+  for (const [index, file] of todo.entries()) {
+    const shown = relative(folder, file);
+    process.stdout.write(
+      `  ${String(index + 1).padStart(3)}/${todo.length}  ${shown.padEnd(42)}`,
+    );
 
     try {
       const reading = await reader.read({
-        bytes: new Uint8Array(readFileSync(path)),
-        mimeType,
-        fileName: name,
+        bytes: new Uint8Array(readFileSync(file)),
+        mimeType: MIME_BY_EXTENSION[extname(file).toLowerCase()]!,
+        fileName: basename(file),
       });
 
       const text =
         reading.extractedText?.trim() ||
         reading.rows
-          .map((row) => `${row.topic} ${row.reference ?? ''}`)
+          .map((row) => `${row.topic} ${row.reference ?? ''}`.trim())
           .join('\n');
 
       if (reading.kind === 'unreadable' || text === '') {
@@ -80,40 +94,38 @@ try {
         continue;
       }
 
-      // The file name is usually the page number, and is what the student will
-      // recognise when an answer cites it.
       store.saveBookPage({
-        id: name,
-        label: labelFor(name, reading.summary),
+        id: idFor(folder, file),
+        label: labelFor(file),
         text,
         sourceKind: 'indexed',
       });
       read += 1;
-      console.log(`ok (${text.length} tecken)`);
+      console.log(`${labelFor(file).padEnd(14)} ${text.length} tecken`);
     } catch (error) {
       skipped += 1;
       console.log(
         error instanceof UnsupportedFileError ? 'unsupported' : 'failed',
       );
-      if (!(error instanceof UnsupportedFileError)) throw error;
+      if (!(error instanceof UnsupportedFileError)) {
+        console.error(`      ${describe(error)}`);
+        console.error(
+          '      Stopping here. Run the same command again to carry on ' +
+            'from this page.',
+        );
+        break;
+      }
     }
   }
 
   console.log(
-    `\n${read} pages indexed, ${skipped} skipped. ` +
+    `\n${read} pages read, ${skipped} skipped. ` +
       `${store.bookPageCount()} pages in the book now.`,
   );
 } finally {
   store.close();
 }
 
-/** "s84.jpg" becomes "s. 84"; anything else keeps the file name. */
-function labelFor(fileName: string, summary: string): string {
-  const stem = basename(fileName, extname(fileName));
-  const page = /(?:^|\D)(\d{1,3})(?:\D|$)/.exec(stem);
-  if (page) return `s. ${page[1]}`;
-  return summary.trim().slice(0, 40) || stem;
+function describe(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
-
-/** Keeps the compiler honest about statSync being unused on some paths. */
-void statSync;
