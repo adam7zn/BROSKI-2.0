@@ -8,7 +8,7 @@ import {
   type InboundAttachment,
 } from '@math-study-companion/conversation';
 
-import { readConfig } from './config.js';
+import { PathNotFoundError, readConfig, resolveUserPath } from './config.js';
 import { handleUpload } from './handle-upload.js';
 import { openStore } from './wire.js';
 
@@ -25,11 +25,22 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.pdf': 'application/pdf',
 };
 
-const path = process.argv[2];
-if (!path) {
+const given = process.argv[2];
+if (!given) {
   console.error('Usage: pnpm upload <file>');
   console.error('  a photo (jpg, png, webp) or a PDF of a plan or assignment');
   process.exit(1);
+}
+
+let path: string;
+try {
+  path = resolveUserPath(given);
+} catch (error) {
+  if (error instanceof PathNotFoundError) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  throw error;
 }
 
 const config = readConfig();

@@ -7,7 +7,7 @@ import {
 } from '@math-study-companion/conversation';
 
 import { MIME_BY_EXTENSION, findPages, idFor, labelFor } from './book-files.js';
-import { readConfig } from './config.js';
+import { PathNotFoundError, readConfig, resolveUserPath } from './config.js';
 import { openStore } from './wire.js';
 
 /**
@@ -35,11 +35,22 @@ if (!config.hasModelKey) {
   process.exit(1);
 }
 
+let root: string;
+try {
+  root = resolveUserPath(folder);
+} catch (error) {
+  if (error instanceof PathNotFoundError) {
+    console.error(error.message);
+    process.exit(1);
+  }
+  throw error;
+}
+
 const store = openStore(config);
 const reader = new ClaudeDocumentReader();
 
 try {
-  const files = findPages(folder);
+  const files = findPages(root);
   if (files.length === 0) {
     console.error(`No images or PDFs in ${folder}.`);
     process.exit(1);
@@ -48,9 +59,9 @@ try {
   const alreadyIndexed = new Set(store.bookPages().map((page) => page.id));
   const todo = redoEverything
     ? files
-    : files.filter((file) => !alreadyIndexed.has(idFor(folder, file)));
+    : files.filter((file) => !alreadyIndexed.has(idFor(root, file)));
 
-  console.log(`${files.length} pages found in ${folder}.`);
+  console.log(`${files.length} pages found in ${root}.`);
   if (todo.length < files.length) {
     console.log(
       `${files.length - todo.length} already indexed — skipping them. ` +
@@ -70,7 +81,7 @@ try {
   let skipped = 0;
 
   for (const [index, file] of todo.entries()) {
-    const shown = relative(folder, file);
+    const shown = relative(root, file);
     process.stdout.write(
       `  ${String(index + 1).padStart(3)}/${todo.length}  ${shown.padEnd(42)}`,
     );
@@ -95,7 +106,7 @@ try {
       }
 
       store.saveBookPage({
-        id: idFor(folder, file),
+        id: idFor(root, file),
         label: labelFor(file),
         text,
         sourceKind: 'indexed',

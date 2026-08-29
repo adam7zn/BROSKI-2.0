@@ -55,6 +55,37 @@ export function describeEnvKeys(path = resolve(repoRoot, '.env')): string {
     .join(', ');
 }
 
+/**
+ * Turns a path a person typed into one that exists.
+ *
+ * pnpm runs a workspace script from inside the package, so a plain
+ * `pnpm index-book chapter-1` looks for `apps/companion/chapter-1`. What they
+ * meant was the folder they can see, at the top of the repository — so try
+ * both, and say where you looked when neither is there.
+ */
+export function resolveUserPath(input: string): string {
+  const fromCwd = resolve(process.cwd(), input);
+  if (existsSync(fromCwd)) return fromCwd;
+
+  const fromRepo = resolve(repoRoot, input);
+  if (existsSync(fromRepo)) return fromRepo;
+
+  throw new PathNotFoundError(input, [fromCwd, fromRepo]);
+}
+
+export class PathNotFoundError extends Error {
+  constructor(
+    readonly input: string,
+    readonly tried: string[],
+  ) {
+    super(
+      `Could not find "${input}". Looked in:\n` +
+        tried.map((path) => `  ${path}`).join('\n'),
+    );
+    this.name = 'PathNotFoundError';
+  }
+}
+
 export interface Config {
   databasePath: string;
   studyPlanPath: string;

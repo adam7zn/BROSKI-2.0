@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
-import { describeEnvKeys, loadEnvFile } from '../src/config.js';
+import {
+  PathNotFoundError,
+  describeEnvKeys,
+  loadEnvFile,
+  resolveUserPath,
+} from '../src/config.js';
 
 const workspace = mkdtempSync(join(tmpdir(), 'msc-config-'));
 after(() => rmSync(workspace, { recursive: true, force: true }));
@@ -53,4 +58,25 @@ test('the diagnostic names keys and value lengths, never values', () => {
 
 test('a missing file describes nothing', () => {
   assert.equal(describeEnvKeys(join(workspace, 'nope.env')), '');
+});
+
+test('a folder is found from the repository root, not only from the cwd', () => {
+  // pnpm runs a workspace script from inside the package, so a path the person
+  // typed while looking at the repository root would otherwise be missed.
+  const found = resolveUserPath('package.json');
+  assert.ok(found.endsWith('/package.json'));
+  assert.ok(existsSync(found));
+});
+
+test('a path that is nowhere says where it looked', () => {
+  assert.throws(
+    () => resolveUserPath('definitivt-inte-en-riktig-mapp'),
+    (error: unknown) => {
+      assert.ok(error instanceof PathNotFoundError);
+      assert.match(error.message, /Looked in:/);
+      // Both candidates are named, so the person can see which one they meant.
+      assert.equal(error.tried.length, 2);
+      return true;
+    },
+  );
 });
