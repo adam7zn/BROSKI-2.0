@@ -1,0 +1,44 @@
+[
+  {
+    "id": "lin-eq-balance",
+    "topic": "linjära ekvationer",
+    "sourceText": "En ekvation löses genom att samma operation utförs på båda sidor om likhetstecknet.",
+    "difficulty": "easy",
+    "image": null
+  },
+  {
+    "id": "lin-eq-parentheses",
+    "topic": "linjära ekvationer med parenteser",
+    "sourceText": "Multiplicera in faktorn i parentesen innan termerna flyttas, till exempel 3(x + 2) = 3x + 6.",
+    "difficulty": "medium",
+    "image": null
+  },
+  {
+    "id": "quadratic-pq",
+    "topic": "andragradsekvationer",
+    "sourceText": "En ekvation på formen x^2 + px + q = 0 löses med pq-formeln x = -p/2 ± roten ur ((p/2)^2 - q).",
+    "difficulty": "medium",
+    "image": null
+  },
+  {
+    "id": "factor-theorem",
+    "topic": "faktorsatsen",
+    "sourceText": "Om P(a) = 0 så är (x - a) en faktor i polynomet P(x).",
+    "difficulty": "medium",
+    "image": null
+  },
+  {
+    "id": "linear-functions",
+    "topic": "räta linjens ekvation",
+    "sourceText": "I y = kx + m anger k linjens lutning och m dess skärning med y-axeln.",
+    "difficulty": "easy",
+    "image": null
+  },
+  {
+    "id": "exponent-rules",
+    "topic": "potenslagar",
+    "sourceText": "Potenser med samma bas multipliceras genom att exponenterna adderas: a^m · a^n = a^(m+n).",
+    "difficulty": "hard",
+    "image": null
+  }
+]

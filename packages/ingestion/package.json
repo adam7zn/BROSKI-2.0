@@ -1,0 +1,22 @@
+{
+  "name": "@math-study-companion/ingestion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "extract": "tsx src/cli.ts",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@math-study-companion/contracts": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

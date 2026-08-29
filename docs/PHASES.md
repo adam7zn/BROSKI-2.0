@@ -2,7 +2,12 @@
 
 This is the implementation order for the project. Work only on the current phase. The larger architecture documents are reference material, not a reason to build future features early.
 
-## Fixed two-person split
+> **The two-person split is retired.** One builder owns every part of the
+> system, so the ownership tables below are historical. The phase order and the
+> done conditions still hold, and they are still the rule for what to build
+> next.
+
+## Fixed two-person split (historical)
 
 | Owner | Owns now | Does not own now |
 |---|---|---|

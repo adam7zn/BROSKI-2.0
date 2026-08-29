@@ -1,0 +1,12 @@
+node_modules/
+coverage/
+dist/
+pnpm-lock.yaml
+
+# Generated/private textbook extraction artifacts are not source-formatting targets.
+chapter-1/
+supabase/.temp/
+
+# Preserve the project documentation's existing formatting.
+README.md
+docs/

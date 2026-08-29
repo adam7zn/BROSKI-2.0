@@ -1,6 +1,11 @@
 # Two-Person Team Ownership
 
-> **Current-phase note:** [Delivery phases](PHASES.md) is authoritative through the first real-message demo. During those phases, Person A owns messaging and the simple agent; Person B owns the backend, data, images, files, operations, and deployment. The broader split below is a later-stage option, not the starting plan.
+> **Retired.** The project has one builder; there is no Person A and Person B.
+> Keep this document for the interface boundaries it describes — they are still
+> how the packages are separated — and ignore the hand-off, review, and status
+> rituals.
+>
+> **Earlier note:** [Delivery phases](PHASES.md) is authoritative through the first real-message demo. During those phases, Person A owns messaging and the simple agent; Person B owns the backend, data, images, files, operations, and deployment. The broader split below is a later-stage option, not the starting plan.
 
 ## 1. Recommended split
 
