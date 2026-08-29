@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
@@ -221,5 +222,91 @@ test('a student profile survives a reopen', () => {
 
   const second = new InteractionStore(path);
   assert.deepEqual(second.loadProfile('555'), profile);
+  second.close();
+});
+
+test('a database from an older version is upgraded, not rejected', () => {
+  // Exactly the shape the store created before modes, reasons, transcripts, and
+  // hint counts existed. A file like this holds real answers from a real
+  // student, so opening it has to work.
+  const path = join(workspace, 'legacy.db');
+  const legacy = new DatabaseSync(path);
+  legacy.exec(`
+    CREATE TABLE interactions (
+      id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL,
+      conversation_id TEXT NOT NULL,
+      study_item_id TEXT,
+      topic TEXT NOT NULL,
+      source_text TEXT NOT NULL,
+      difficulty TEXT NOT NULL,
+      image TEXT,
+      question TEXT,
+      expected_answer TEXT,
+      rubric TEXT,
+      status TEXT NOT NULL,
+      trace TEXT
+    );
+    CREATE TABLE attempts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      interaction_id TEXT NOT NULL,
+      student_reply TEXT NOT NULL,
+      result TEXT NOT NULL,
+      feedback TEXT NOT NULL,
+      confidence REAL NOT NULL,
+      deterministic INTEGER NOT NULL,
+      agent TEXT NOT NULL,
+      model TEXT,
+      prompt_version TEXT NOT NULL,
+      evaluated_at TEXT NOT NULL
+    );
+    CREATE TABLE sent_messages (
+      idempotency_key TEXT PRIMARY KEY,
+      interaction_id TEXT NOT NULL,
+      provider TEXT NOT NULL,
+      provider_message_id TEXT NOT NULL,
+      sent_at TEXT NOT NULL
+    );
+  `);
+  legacy
+    .prepare(
+      `INSERT INTO interactions
+         (id, created_at, conversation_id, study_item_id, topic, source_text,
+          difficulty, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      'old-1',
+      '2026-08-28T00:00:00Z',
+      '555',
+      'lin-eq-balance',
+      'gammalt',
+      'text',
+      'easy',
+      'answered',
+    );
+  legacy.close();
+
+  const store = new InteractionStore(path);
+  const saved = store.recentInteractions();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0]?.id, 'old-1');
+  // The new columns arrive with sensible values rather than breaking the row.
+  assert.equal(saved[0]?.mode, 'PRACTISE');
+  assert.equal(saved[0]?.reason, '');
+  // And the store is fully usable afterwards.
+  store.planInteraction(context, '555', 'lin-eq-balance');
+  store.saveOutcome(completed());
+  assert.equal(store.recentInteractions().length, 2);
+  store.close();
+});
+
+test('opening an already-migrated database twice is harmless', () => {
+  const path = join(workspace, 'twice.db');
+  const first = new InteractionStore(path);
+  first.close();
+  const second = new InteractionStore(path);
+  second.planInteraction(context, '555', 'lin-eq-balance');
+  assert.equal(second.recentInteractions().length, 1);
   second.close();
 });

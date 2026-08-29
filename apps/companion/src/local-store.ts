@@ -51,6 +51,39 @@ export class InteractionStore {
     this.#db.exec('PRAGMA journal_mode = WAL');
     this.#db.exec('PRAGMA foreign_keys = ON');
     this.#db.exec(readFileSync(join(here, 'local-store-schema.sql'), 'utf8'));
+    this.#migrate();
+  }
+
+  /**
+   * Adds columns a database made by an older version is missing.
+   *
+   * `CREATE TABLE IF NOT EXISTS` leaves an existing table exactly as it was, so
+   * without this a file from last week fails every query with "no such column"
+   * — and the file holds real answers from a real student, so deleting it is
+   * not an acceptable fix.
+   */
+  #migrate(): void {
+    const columns: Array<[table: string, column: string, definition: string]> =
+      [
+        ['interactions', 'mode', "TEXT NOT NULL DEFAULT 'PRACTISE'"],
+        ['interactions', 'reason', "TEXT NOT NULL DEFAULT ''"],
+        ['interactions', 'lesson_id', 'TEXT'],
+        ['interactions', 'transcript', 'TEXT'],
+        ['attempts', 'hints_given', 'INTEGER NOT NULL DEFAULT 0'],
+        ['attempts', 'student_turns', 'INTEGER NOT NULL DEFAULT 1'],
+      ];
+
+    for (const [table, column, definition] of columns) {
+      if (this.#hasColumn(table, column)) continue;
+      this.#db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
+  }
+
+  #hasColumn(table: string, column: string): boolean {
+    const rows = this.#db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all() as Array<{ name: string }>;
+    return rows.some((row) => row.name === column);
   }
 
   /** The student this conversation belongs to, if setup has happened. */
