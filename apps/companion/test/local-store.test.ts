@@ -193,3 +193,33 @@ test('otherwise the item studied longest ago is chosen, with a stated reason', (
   assert.equal(selection.item.id, 'a');
   assert.match(selection.reason, /8 days ago/);
 });
+
+test('a student profile survives a reopen', () => {
+  const path = join(workspace, 'profile.db');
+  const profile = {
+    displayName: 'William',
+    schoolYear: 2 as const,
+    age: 17,
+    className: 'NA22B',
+    course: { code: 'Ma2c' as const, raw: 'Ma2c' },
+    textbook: 'Matematik 5000+ 2c',
+    currentTopic: 'andragradsekvationer',
+    selfAssessedLevel: 'struggling' as const,
+    previousGrade: 'C',
+    lessonSlots: [{ weekday: 'tuesday' as const, startsAt: '09:15' }],
+    nextAssessment: null,
+    quietHours: { start: '21:00', end: '07:00' },
+    timezone: 'Europe/Stockholm',
+    language: 'sv' as const,
+    updatedAt: new Date().toISOString(),
+  };
+
+  const first = new InteractionStore(path);
+  assert.equal(first.loadProfile('555'), null);
+  first.saveProfile('555', profile);
+  first.close();
+
+  const second = new InteractionStore(path);
+  assert.deepEqual(second.loadProfile('555'), profile);
+  second.close();
+});

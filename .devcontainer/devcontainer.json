@@ -4,9 +4,7 @@
   "postCreateCommand": "corepack enable && pnpm install --frozen-lockfile",
   "customizations": {
     "vscode": {
-      "extensions": [
-        "dbaeumer.vscode-eslint"
-      ]
+      "extensions": ["dbaeumer.vscode-eslint"]
     }
   }
 }

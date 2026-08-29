@@ -45,3 +45,24 @@ export type {
   SourceReviewState,
   StructuredExtraction,
 } from './source-content.js';
+export {
+  DEFAULT_QUIET_HOURS,
+  courseIdentitySchema,
+  lessonSlotSchema,
+  mathCourseCodeSchema,
+  quietHoursSchema,
+  selfAssessedLevelSchema,
+  studentProfileSchema,
+  upcomingAssessmentSchema,
+  weekdaySchema,
+} from './student-profile.js';
+export type {
+  CourseIdentity,
+  LessonSlot,
+  MathCourseCode,
+  QuietHours,
+  SelfAssessedLevel,
+  StudentProfile,
+  UpcomingAssessment,
+  Weekday,
+} from './student-profile.js';

@@ -33,6 +33,11 @@ question generator. Without real dates in it, every decision falls back to
 | `covers` | Study items that lesson teaches — used to practise afterwards. |
 | `prepares` | Study items worth meeting before it. Falls back to `covers`. |
 
+`pnpm onboard` writes this file from the lesson times the student gives, four
+weeks ahead, and overwrites whatever was here. It leaves every `covers` list
+empty — filling those in is the one step that makes `PREPARE` and `PRACTISE`
+work, and it is deliberately a person's job.
+
 Fill it in a couple of weeks at a time from the actual schedule. `npm run plan`
 shows what the calendar would produce for the coming week before a single
 message is sent.

@@ -12,6 +12,9 @@ export {
 } from './onboarding.js';
 
 export * from './contracts.js';
+export * from './onboarding/parse.js';
+export * from './onboarding/steps.js';
+export * from './onboarding/student-setup.js';
 export * from './inbox.js';
 export * from './session.js';
 export * from './agent/types.js';

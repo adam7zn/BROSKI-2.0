@@ -25,6 +25,13 @@ export interface RunOnboardingInput {
   signal?: AbortSignal;
 }
 
+/**
+ * The judge demo's scripted three-question onboarding, in English.
+ *
+ * Deliberately left as its own path: the demo asserts these exact prompts. The
+ * product flow is `runStudentSetup` in `./onboarding/student-setup.js`, which
+ * asks what the planner actually needs.
+ */
 export async function runOnboarding(
   input: RunOnboardingInput,
 ): Promise<DemoProfileInput> {

@@ -74,6 +74,45 @@ apps/admin/              content review UI
 apps/companion/          runnable entry points: plan, chat, telegram, imessage
 ```
 
+## First contact
+
+The companion introduces itself and asks what to call the student, then collects
+what it needs to be useful. `pnpm onboard` runs it on its own; `pnpm chat` and
+`pnpm telegram` run it automatically the first time they meet a conversation
+they have no profile for.
+
+```
+Broski: Hej! Jag heter Broski och ska plugga matte med dig. Vad ska jag kalla dig?
+William
+Broski: Trevligt att träffas! 11 korta frågor, sen sätter vi igång.
+```
+
+| Asked | Why it earns a question |
+|---|---|
+| What to call you | Everything else is small talk without it |
+| Maths course (Ma1c, Ma2c, …) | Decides the level and the notation |
+| Textbook | Questions must use the book's methods, not a generic one's |
+| What you are doing right now | Where in the course to start |
+| Lesson days and times | Becomes the course calendar the planner reads |
+| Struggling / okay / confident | Sets the opening difficulty |
+| Year, age, class | Tone, and who this profile belongs to |
+| Next test | Lets preparation aim at something real |
+| Quiet hours | Bounds when anything may ever be sent |
+| Last grade | Optional context, and skippable by design |
+
+Only a name is required. Every optional answer takes "hoppa över", and an answer
+the companion cannot read is asked about once and then let go — a companion that
+badgers is worse than one missing a field.
+
+Free-text answers are read without a model: "tis 9.15 och tors 13" becomes two
+lesson slots, "matte 2c" becomes `Ma2c`, "3 oktober" becomes a date. Anything
+unrecognised is kept verbatim rather than guessed at, so an unusual course name
+survives as the student wrote it.
+
+The lesson times are written straight into `data/course-plan.json`. Their
+`covers` lists stay empty: which study item a given lesson teaches is still
+something only a person knows, and the companion does not invent it.
+
 ## The study loop
 
 Two paths run today. The judge demo is the canonical one, scripted end to end

@@ -8,6 +8,7 @@ import {
 } from '@math-study-companion/conversation';
 
 import { readConfig } from './config.js';
+import { ensureProfile } from './setup-gate.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
@@ -29,6 +30,31 @@ async function main(): Promise<void> {
   const readline = createInterface({ input: stdin, output: stdout });
 
   try {
+    // Everything he types reaches the fake provider as it arrives, so setup and
+    // the interaction that follows share one input stream.
+    void (async () => {
+      for await (const line of readline) {
+        messaging.deliver(conversationId, line);
+      }
+      // Piped input ran out (or he pressed ctrl-D): stop waiting.
+      controller.abort();
+    })();
+
+    const profile = await ensureProfile({
+      store,
+      config,
+      conversationId,
+      messaging,
+      inbox,
+      signal: controller.signal,
+      onMessage: (entry) => {
+        if (entry.role === 'companion') {
+          stdout.write(`\nBroski: ${entry.text}\n\nDu: `);
+        }
+      },
+    });
+    console.log(`\n(profil: ${profile.displayName})`);
+
     const planned = planNextInteraction(store, config, conversationId, {
       force: process.argv.includes('--force'),
     });
@@ -43,16 +69,6 @@ async function main(): Promise<void> {
       `\n[${planned.decision.mode}] ${planned.context.topic} — ${planned.decision.reason}.`,
     );
     console.log(`Interaction ${planned.context.interactionId}\n`);
-
-    // Everything he types goes to the fake provider as it arrives, so a hint
-    // request or a second attempt reaches the same conversation.
-    void (async () => {
-      for await (const line of readline) {
-        messaging.deliver(conversationId, line);
-      }
-      // Piped input ran out (or he pressed ctrl-D): stop waiting.
-      controller.abort();
-    })();
 
     const outcome = await runInteraction({
       context: planned.context,

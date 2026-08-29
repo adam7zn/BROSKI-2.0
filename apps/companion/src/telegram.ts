@@ -8,6 +8,7 @@ import {
 } from '@math-study-companion/conversation';
 
 import { describeEnvKeys, readConfig, repoRoot } from './config.js';
+import { ensureProfile } from './setup-gate.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
@@ -58,6 +59,21 @@ async function main(): Promise<void> {
   });
 
   try {
+    const profile = await ensureProfile({
+      store,
+      config,
+      conversationId: config.telegramChatId,
+      messaging,
+      inbox,
+      signal: controller.signal,
+      onMessage: (entry) => {
+        console.log(
+          `  ${entry.role === 'companion' ? 'broski ' : 'student'}  ${entry.text}`,
+        );
+      },
+    });
+    console.log(`\nTalking to ${profile.displayName}.`);
+
     do {
       const planned = planNextInteraction(
         store,

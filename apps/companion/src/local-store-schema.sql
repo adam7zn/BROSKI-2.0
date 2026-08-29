@@ -50,3 +50,11 @@ CREATE TABLE IF NOT EXISTS sent_messages (
 
 CREATE INDEX IF NOT EXISTS interactions_created_at ON interactions(created_at);
 CREATE INDEX IF NOT EXISTS attempts_interaction ON attempts(interaction_id);
+
+-- Who the companion is talking to. One row per conversation; the profile is
+-- replaced wholesale when the student corrects something.
+CREATE TABLE IF NOT EXISTS student_profiles (
+  conversation_id   TEXT PRIMARY KEY,
+  profile           TEXT NOT NULL,      -- JSON: StudentProfile
+  updated_at        TEXT NOT NULL
+);

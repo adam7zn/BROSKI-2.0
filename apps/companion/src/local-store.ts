@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import {
+  studentProfileSchema,
+  type StudentProfile,
+} from '@math-study-companion/contracts';
 import type {
   BackendContext,
   InteractionOutcome,
@@ -47,6 +51,26 @@ export class InteractionStore {
     this.#db.exec('PRAGMA journal_mode = WAL');
     this.#db.exec('PRAGMA foreign_keys = ON');
     this.#db.exec(readFileSync(join(here, 'local-store-schema.sql'), 'utf8'));
+  }
+
+  /** The student this conversation belongs to, if setup has happened. */
+  loadProfile(conversationId: string): StudentProfile | null {
+    const row = this.#db
+      .prepare('SELECT profile FROM student_profiles WHERE conversation_id = ?')
+      .get(conversationId) as { profile: string } | undefined;
+    if (!row) return null;
+    return studentProfileSchema.parse(JSON.parse(row.profile));
+  }
+
+  saveProfile(conversationId: string, profile: StudentProfile): void {
+    this.#db
+      .prepare(
+        `INSERT INTO student_profiles (conversation_id, profile, updated_at)
+         VALUES (?, ?, ?)
+         ON CONFLICT(conversation_id) DO UPDATE
+           SET profile = excluded.profile, updated_at = excluded.updated_at`,
+      )
+      .run(conversationId, JSON.stringify(profile), profile.updatedAt);
   }
 
   /** Records a planned interaction before anything is sent. */
