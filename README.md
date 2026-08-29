@@ -166,6 +166,51 @@ with no known lesson time falls back to 08:00 rather than inventing one.
 Reading a document needs `ANTHROPIC_API_KEY`. There is no offline way to read a
 photo, and the companion says so rather than pretending the picture was blurry.
 
+## Chatting with it
+
+The companion is a chat partner first. Write anything about your maths and it
+answers; write "plugga" and it gives you something to practise.
+
+```bash
+pnpm ask                       # a conversation in the terminal
+pnpm ask "hur funkar pq-formeln"   # a single question
+pnpm telegram                  # the same, on the phone
+```
+
+**It answers from the student's own textbook and nothing else.** Pages are
+searched for the question, the ones that match are put in front of the model,
+and the model is told those pages are the only source it may use. A question
+the book does not cover gets said so, plainly, rather than answered from
+general knowledge:
+
+> Det där hittar jag inte i din bok. Vilket kapitel står det i?
+
+That restriction is deliberate. A student taught one method in class and a
+different one by the companion is worse off than one who got no help at all.
+A page the model claims to have used but was never given is dropped from the
+record, so a cited page always means a page that was really there.
+
+### Getting the book in
+
+```bash
+pnpm index-book data/bok
+```
+
+Every image or PDF in the folder is read once and its text stored. A file named
+`s84.jpg` is cited back as "s. 84". Photographing a page and sending it in
+Telegram adds it the same way, one page at a time.
+
+The images themselves are never committed. A textbook is copyrighted, and
+`docs/RULES.md` §8 keeps stored source material to what the pilot needs — so
+keep the folder out of git and index it locally.
+
+Search is a keyword score, not embeddings: the index is one chapter of one book,
+it has to work with no network, and when it picks the wrong page you can read
+the rule and argue with it. Swedish compounds are handled — a page about
+"andragradsekvationer" answers to a question about "ekvationer" — and a
+hyphenated term like "pq-formeln" is kept whole, because that is what makes it
+worth searching for.
+
 ## The study loop
 
 Two paths run today. The judge demo is the canonical one, scripted end to end

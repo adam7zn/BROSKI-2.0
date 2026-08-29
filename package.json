@@ -35,7 +35,9 @@
     "telegram": "pnpm --filter @math-study-companion/companion telegram",
     "inspect": "pnpm --filter @math-study-companion/companion inspect",
     "onboard": "pnpm --filter @math-study-companion/companion onboard",
-    "upload": "pnpm --filter @math-study-companion/companion upload"
+    "upload": "pnpm --filter @math-study-companion/companion upload",
+    "index-book": "pnpm --filter @math-study-companion/companion index-book",
+    "ask": "pnpm --filter @math-study-companion/companion ask"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

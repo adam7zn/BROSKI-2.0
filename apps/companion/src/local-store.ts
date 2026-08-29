@@ -17,6 +17,12 @@ import type { AttemptRecord } from '@math-study-companion/planning';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+export interface BookPage {
+  id: string;
+  label: string;
+  text: string;
+}
+
 export interface StoredInteraction {
   id: string;
   createdAt: string;
@@ -84,6 +90,46 @@ export class InteractionStore {
       .prepare(`PRAGMA table_info(${table})`)
       .all() as Array<{ name: string }>;
     return rows.some((row) => row.name === column);
+  }
+
+  /** Saves one page of the textbook so questions can be grounded in it. */
+  saveBookPage(page: {
+    id: string;
+    label: string;
+    text: string;
+    sourceKind: 'indexed' | 'uploaded';
+  }): void {
+    this.#db
+      .prepare(
+        `INSERT INTO book_pages (id, label, text, source_kind, indexed_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE
+           SET label = excluded.label,
+               text = excluded.text,
+               source_kind = excluded.source_kind,
+               indexed_at = excluded.indexed_at`,
+      )
+      .run(
+        page.id,
+        page.label,
+        page.text,
+        page.sourceKind,
+        new Date().toISOString(),
+      );
+  }
+
+  bookPages(): BookPage[] {
+    const rows = this.#db
+      .prepare('SELECT id, label, text FROM book_pages ORDER BY indexed_at ASC')
+      .all() as Array<{ id: string; label: string; text: string }>;
+    return rows;
+  }
+
+  bookPageCount(): number {
+    const row = this.#db
+      .prepare('SELECT COUNT(*) AS n FROM book_pages')
+      .get() as { n: number };
+    return row.n;
   }
 
   /** The student this conversation belongs to, if setup has happened. */

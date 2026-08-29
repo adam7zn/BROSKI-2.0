@@ -90,6 +90,20 @@ export async function handleUpload(
   if (result.studyItems.length > 0) {
     writeStudyPlan(input.config.studyPlanPath, result.studyItems);
   }
+  // A page of the book is worth keeping as a page of the book, not only as
+  // something to practise on: the next question may be about it.
+  if (
+    (reading.kind === 'material' || reading.kind === 'assignment') &&
+    reading.extractedText?.trim()
+  ) {
+    input.store.saveBookPage({
+      id: `upload:${input.attachment.providerFileId}`,
+      label: reading.summary.trim().slice(0, 40) || 'Uppladdad sida',
+      text: reading.extractedText.trim(),
+      sourceKind: 'uploaded',
+    });
+  }
+
   if (result.nextAssessment) {
     input.store.saveProfile(input.conversationId, {
       ...input.profile,

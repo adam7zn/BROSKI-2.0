@@ -58,3 +58,16 @@ CREATE TABLE IF NOT EXISTS student_profiles (
   profile           TEXT NOT NULL,      -- JSON: StudentProfile
   updated_at        TEXT NOT NULL
 );
+
+-- Pages of the student's own textbook, read once and searched at every turn.
+-- The images themselves stay on disk and out of git: they are copyrighted, and
+-- docs/RULES.md §8.2 keeps stored source material to what the pilot needs.
+CREATE TABLE IF NOT EXISTS book_pages (
+  id            TEXT PRIMARY KEY,      -- file name, or the message it arrived in
+  label         TEXT NOT NULL,         -- what to call it: "s. 84", "kap 3"
+  text          TEXT NOT NULL,         -- what the page says
+  source_kind   TEXT NOT NULL,         -- indexed | uploaded
+  indexed_at    TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS book_pages_indexed_at ON book_pages(indexed_at);

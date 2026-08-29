@@ -7,7 +7,10 @@ import {
   ReplyInbox,
   TelegramMessagingProvider,
   runInteraction,
+  runTutorTurn,
   type DocumentReader,
+  type StudyAgent,
+  type TutorMessage,
   type InboundMessageEvent,
 } from '@math-study-companion/conversation';
 
@@ -97,67 +100,62 @@ async function main(): Promise<void> {
       'Send a photo of your term plan, schedule, or an assignment and I will read it.',
     );
 
-    do {
-      const planned = planNextInteraction(
-        store,
-        config,
-        config.telegramChatId,
-        {
-          force,
-        },
-      );
+    const pages = store.bookPages();
+    console.log(
+      pages.length > 0
+        ? `${pages.length} pages of the book indexed.`
+        : 'No book pages indexed yet — questions about the book will be declined.',
+    );
+    console.log('\nWaiting. Write anything, or "plugga" for a question.\n');
 
-      if (!planned.context) {
-        console.log(`\nStaying quiet: ${planned.decision.reason}.`);
-        console.log('Run with --force to ask something anyway.');
-        break;
-      }
+    const history: TutorMessage[] = [];
 
-      console.log(
-        `\n[${planned.decision.mode}] ${planned.context.topic} — ${planned.decision.reason}.`,
-      );
-
-      const outcome = await runInteraction({
-        context: planned.context,
-        conversationId: config.telegramChatId,
-        agent,
-        messaging,
-        inbox,
-        replyTimeoutMs: config.replyTimeoutMs,
-        signal: controller.signal,
-        onMessage: (entry) => {
-          console.log(
-            `  ${entry.role === 'companion' ? 'companion' : 'william  '}  ${entry.text}`,
-          );
-        },
-      });
-
-      store.saveOutcome(outcome);
-
-      if (outcome.status === 'no_reply') {
-        console.log(
-          '  no reply within the window; nothing stored as an attempt.',
-        );
-        break;
-      }
-
-      console.log(
-        `  judged     ${outcome.result.result} ` +
-          `(confidence ${outcome.final.confidence.toFixed(2)}` +
-          `${outcome.final.deterministic ? ', deterministic' : ''}` +
-          `${outcome.trace.hintsGiven ? `, ${outcome.trace.hintsGiven} hint(s)` : ''})`,
-      );
-
-      if (!keepServing) break;
-
-      console.log('\nWaiting for him to write again before the next question…');
-      const trigger = await inbox.waitFor(config.telegramChatId, {
+    // The companion is a chat partner by default. A planned study interaction
+    // takes over the conversation while it runs, and hands it back after.
+    while (!controller.signal.aborted) {
+      const incoming = await inbox.waitFor(config.telegramChatId, {
         notBefore: new Date(),
         timeoutMs: 12 * 60 * 60 * 1000,
         signal: controller.signal,
       });
-      if (!trigger) break;
-    } while (!controller.signal.aborted);
+      if (!incoming) break;
+      console.log(`  student    ${incoming.text}`);
+
+      if (wantsStudyItem(incoming.text)) {
+        await study({
+          store,
+          config,
+          agent,
+          messaging,
+          inbox,
+          signal: controller.signal,
+          force,
+        });
+        continue;
+      }
+
+      const turn = await runTutorTurn({
+        question: incoming.text,
+        history,
+        pages: store.bookPages(),
+      });
+      history.push({ role: 'student', text: incoming.text });
+      history.push({ role: 'companion', text: turn.answer });
+
+      await messaging.sendMessage({
+        conversationId: config.telegramChatId,
+        text: turn.answer,
+        idempotencyKey: `tutor:${incoming.providerMessageId}`,
+      });
+      console.log(
+        `  broski     ${turn.answer}` +
+          (turn.covered
+            ? `  [${turn.usedPages.join(', ')}]`
+            : '  [inte i boken]'),
+      );
+
+      if (!keepServing) break;
+    }
   } catch (error) {
     if (error instanceof ModelCallError) {
       // The student has already been told in their own words; this is for
@@ -196,6 +194,69 @@ async function discoverChatId(
     console.log(`chat id ${event.providerConversationId} — "${event.text}"`);
     return;
   }
+}
+
+/** Words that mean "give me something to practise on". */
+function wantsStudyItem(text: string): boolean {
+  return /^\s*[/]?(plugga|öva|ova|fråga mig|fraga mig|quiz|träna|trana)\b/i.test(
+    text,
+  );
+}
+
+/** One planned study interaction, start to finish. */
+async function study(input: {
+  store: ReturnType<typeof openStore>;
+  config: ReturnType<typeof readConfig>;
+  agent: StudyAgent;
+  messaging: TelegramMessagingProvider;
+  inbox: ReplyInbox;
+  signal: AbortSignal;
+  force: boolean;
+}): Promise<void> {
+  const conversationId = input.config.telegramChatId;
+  const planned = planNextInteraction(
+    input.store,
+    input.config,
+    conversationId,
+    {
+      force: true,
+    },
+  );
+
+  if (!planned.context) {
+    await input.messaging.sendMessage({
+      conversationId,
+      text: `Inget att öva på just nu: ${planned.decision.reason}.`,
+      idempotencyKey: `noaction:${Date.now()}`,
+    });
+    return;
+  }
+
+  console.log(
+    `\n[${planned.decision.mode}] ${planned.context.topic} — ${planned.decision.reason}.`,
+  );
+
+  const outcome = await runInteraction({
+    context: planned.context,
+    conversationId,
+    agent: input.agent,
+    messaging: input.messaging,
+    inbox: input.inbox,
+    replyTimeoutMs: input.config.replyTimeoutMs,
+    signal: input.signal,
+    onMessage: (entry) => {
+      console.log(
+        `  ${entry.role === 'companion' ? 'broski ' : 'student'}  ${entry.text}`,
+      );
+    },
+  });
+
+  input.store.saveOutcome(outcome);
+  console.log(
+    outcome.status === 'completed'
+      ? `  judged     ${outcome.result.result}`
+      : '  no reply within the window; nothing stored as an attempt.',
+  );
 }
 
 /**
