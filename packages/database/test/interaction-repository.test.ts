@@ -10,6 +10,7 @@ import {
   InteractionAlreadyCompletedError,
   InteractionIdMismatchError,
   InteractionNotFoundError,
+  PostgresHostedMessagingRepository,
   PostgresInteractionRepository,
   clearJudgeDemoFixture,
   runMigrations,
@@ -43,6 +44,7 @@ const completedAt = new Date('2026-08-28T12:34:56.000Z');
 describe('PostgresInteractionRepository', () => {
   const pool = new Pool({ connectionString });
   const repository = new PostgresInteractionRepository(pool);
+  const messaging = new PostgresHostedMessagingRepository(pool);
 
   beforeAll(async () => {
     await runMigrations(pool);
@@ -248,6 +250,115 @@ describe('PostgresInteractionRepository', () => {
     await expect(
       repository.listDemoMessageEvents('demo-001'),
     ).resolves.toHaveLength(1);
+  });
+
+  it('durably deduplicates and transactionally claims hosted inbox/outbox rows', async () => {
+    await repository.start(context, { traceId: 'hosted-trace' });
+    const createdAt = '2026-08-29T12:00:00.000Z';
+    await expect(
+      messaging.createSession(
+        {
+          interactionId: 'demo-001',
+          provider: 'sendblue',
+          participantAddress: '+46700000000',
+          providerLine: '+13470000000',
+          status: 'active',
+          turnNumber: 0,
+          agentState: { step: 'course' },
+          lastPromptAt: null,
+          traceId: 'hosted-trace',
+          failureCode: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        [
+          {
+            interactionId: 'demo-001',
+            idempotencyKey: 'demo-001:turn:0:00:onboarding-course',
+            turnNumber: 0,
+            purpose: 'onboarding-course',
+            content: 'Which maths course are you taking?',
+            mediaUrl: null,
+            traceId: 'hosted-trace',
+            createdAt,
+          },
+        ],
+      ),
+    ).resolves.toBe('created');
+
+    const outbound = await messaging.claimOutbound({
+      now: createdAt,
+      staleBefore: '2026-08-29T11:59:00.000Z',
+    });
+    expect(outbound?.attemptCount).toBe(1);
+    await messaging.markOutboundAccepted({
+      message: outbound!,
+      providerMessageId: 'sendblue-out-1',
+      acceptedAt: createdAt,
+      event: {
+        provider: 'sendblue',
+        direction: 'outbound',
+        eventType: 'accepted',
+        providerEventId: 'sendblue-out-1',
+        providerMessageId: 'sendblue-out-1',
+        idempotencyKey: outbound!.idempotencyKey,
+        occurredAt: createdAt,
+      },
+      now: createdAt,
+    });
+
+    const message = {
+      provider: 'sendblue',
+      providerEventId: 'sendblue-in-1',
+      providerMessageId: 'sendblue-in-1',
+      interactionId: 'demo-001',
+      turnNumber: 0,
+      senderAddress: '+46700000000',
+      content: 'Mathematics 3c',
+      receivedAt: '2026-08-29T12:00:01.000Z',
+      processingStatus: 'pending' as const,
+      attemptCount: 0,
+      errorCode: null,
+      traceId: 'hosted-trace',
+      createdAt: '2026-08-29T12:00:01.000Z',
+      updatedAt: '2026-08-29T12:00:01.000Z',
+      processedAt: null,
+    };
+    const inboundEvent = {
+      provider: 'sendblue',
+      direction: 'inbound' as const,
+      eventType: 'received' as const,
+      providerEventId: 'sendblue-in-1',
+      providerMessageId: 'sendblue-in-1',
+      idempotencyKey: null,
+      occurredAt: '2026-08-29T12:00:01.000Z',
+    };
+    const outcomes = await Promise.all([
+      messaging.enqueueInbound({ message, event: inboundEvent }),
+      messaging.enqueueInbound({ message, event: inboundEvent }),
+    ]);
+    expect(outcomes.sort()).toEqual(['duplicate', 'queued']);
+
+    const restarted = new PostgresHostedMessagingRepository(pool);
+    await expect(restarted.findSession('demo-001')).resolves.toMatchObject({
+      lastPromptAt: createdAt,
+      status: 'active',
+    });
+    const claimed = await restarted.claimInbound({
+      now: '2026-08-29T12:00:02.000Z',
+      staleBefore: '2026-08-29T12:00:00.000Z',
+    });
+    expect(claimed).toMatchObject({
+      providerEventId: 'sendblue-in-1',
+      processingStatus: 'processing',
+      attemptCount: 1,
+    });
+    await expect(
+      restarted.claimInbound({
+        now: '2026-08-29T12:00:02.000Z',
+        staleBefore: '2026-08-29T12:00:00.000Z',
+      }),
+    ).resolves.toBeNull();
   });
 
   it('clears only the guarded synthetic fixture', async () => {

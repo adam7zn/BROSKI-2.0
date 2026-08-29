@@ -18,6 +18,13 @@ export {
 } from './interaction-repository.js';
 export { runMigrations } from './migration-runner.js';
 export {
+  PostgresHostedMessagingRepository,
+  type HostedInboundMessageRecord,
+  type HostedMessagingSessionRecord,
+  type HostedOutboundRecord,
+  type NewHostedOutboundRecord,
+} from './hosted-messaging-repository.js';
+export {
   clearJudgeDemoFixture,
   type ClearedJudgeDemoFixture,
 } from './judge-demo-maintenance.js';

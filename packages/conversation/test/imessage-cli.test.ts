@@ -78,7 +78,7 @@ test('sends a static local image with argument arrays', async () => {
 
   await provider.sendImage({
     conversationId: '+46700000000',
-    mediaPath: '/tmp/static demo.png',
+    mediaUrl: '/tmp/static demo.png',
     altText: 'linear equation',
     caption: 'Solve 2x + 3 = 11.',
     idempotencyKey: 'image-1',

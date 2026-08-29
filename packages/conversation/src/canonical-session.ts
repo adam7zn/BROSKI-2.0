@@ -26,7 +26,7 @@ export async function runCanonicalInteraction(
   const sent = input.context.image
     ? await input.messaging.sendImage({
         conversationId: input.conversationId,
-        mediaPath: input.context.image,
+        mediaUrl: input.context.image,
         altText: input.context.topic,
         caption: CANONICAL_QUESTION,
         idempotencyKey: `${input.context.interactionId}:question`,

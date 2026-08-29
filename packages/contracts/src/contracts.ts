@@ -26,9 +26,33 @@ export const demoMessageDirectionSchema = z.enum(['inbound', 'outbound']);
 
 export const demoMessageEventTypeSchema = z.enum([
   'accepted',
+  'sent',
+  'delivered',
   'received',
   'failed',
 ]);
+
+export const conversationAgentStatusSchema = z.enum([
+  'waiting',
+  'completed',
+  'stopped',
+]);
+
+export const agentOutboundIntentSchema = z
+  .object({
+    purpose: z.string().trim().min(1).max(80),
+    text: z.string().trim().min(1).max(18_996).nullable(),
+    mediaUrl: z.url().max(2_048).startsWith('https://').nullable(),
+  })
+  .strict()
+  .superRefine((intent, context) => {
+    if (intent.text === null && intent.mediaUrl === null) {
+      context.addIssue({
+        code: 'custom',
+        message: 'An outbound intent requires text or an HTTPS media URL',
+      });
+    }
+  });
 
 export const demoOutboundReservationInputSchema = z
   .object({
@@ -88,7 +112,24 @@ export const conversationToBackendSchema = z
   })
   .strict();
 
+export const conversationAgentOutputSchema = z
+  .object({
+    outbound: z.array(agentOutboundIntentSchema).max(4),
+    agentState: z.json(),
+    profile: demoProfileInputSchema.nullable(),
+    result: conversationToBackendSchema.nullable(),
+    status: conversationAgentStatusSchema,
+  })
+  .strict();
+
 export type ConversationToBackend = z.infer<typeof conversationToBackendSchema>;
+export type AgentOutboundIntent = z.infer<typeof agentOutboundIntentSchema>;
+export type ConversationAgentOutput = z.infer<
+  typeof conversationAgentOutputSchema
+>;
+export type ConversationAgentStatus = z.infer<
+  typeof conversationAgentStatusSchema
+>;
 export type DemoMessageDirection = z.infer<typeof demoMessageDirectionSchema>;
 export type DemoMessageEventInput = z.infer<typeof demoMessageEventInputSchema>;
 export type DemoMessageEventType = z.infer<typeof demoMessageEventTypeSchema>;

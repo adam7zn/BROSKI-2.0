@@ -85,9 +85,9 @@ export class IMessageCliProvider implements MessagingProvider, InboundSource {
 
   async sendImage(input: OutboundImage): Promise<SendResult> {
     this.#assertConversation(input.conversationId);
-    const mediaPath = input.mediaPath.startsWith('file:')
-      ? fileURLToPath(input.mediaPath)
-      : input.mediaPath;
+    const mediaPath = input.mediaUrl.startsWith('file:')
+      ? fileURLToPath(input.mediaUrl)
+      : input.mediaUrl;
     if (!isAbsolute(mediaPath)) {
       throw new Error('iMessage image references must be absolute local paths');
     }

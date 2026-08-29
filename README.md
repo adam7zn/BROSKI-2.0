@@ -70,8 +70,8 @@ The first phases use only two shared payloads so both people can build independe
 
 ## Current milestone
 
-The Platform Phase 1 loop is persisted in Supabase. The active judge MVP connects that same
-canonical interaction to one real iMessage conversation:
+The Platform Phase 1 loop is persisted in PostgreSQL. The active judge MVP connects that same
+canonical interaction to one hosted Sendblue iMessage conversation:
 
 ```text
 backend context
@@ -108,7 +108,7 @@ The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
 | Start the API with Supabase | `pnpm api:start:supabase` |
 | Run the canonical hosted demo | `pnpm demo:supabase` |
 | Clear only the local synthetic fixture | `pnpm demo:clear:local -- --confirm demo-001` |
-| Run the real iMessage demo | `caffeinate -i pnpm demo:imessage` |
+| Queue the hosted Sendblue demo | `pnpm demo:sendblue` |
 
 The hosted project is `Math Study Companion` (`leknhhxqqehwiaxvzwnt`) in `eu-west-1`. Deployments
 provide its complete `DATABASE_URL` as a secret. For local use, either copy `.env.example` to the
@@ -125,37 +125,35 @@ it with `pnpm api:start:supabase`, and then run `pnpm demo:supabase`. Restart th
 For isolated checks, run `pnpm db:up`, `pnpm db:migrate`, and `pnpm check`, then stop the disposable
 service with `pnpm db:down`. CI follows this local path and never connects to Supabase.
 
-## Judge iMessage demo
+## Hosted Sendblue judge demo
 
-The real-message adapter uses the official
-[`imessage-cli`](https://github.com/beeper/platform-imessage) locally. Sign Messages.app on this Mac
-into the dedicated companion Apple ID and keep the demo phone on a separate identity. Apple
-credentials are never copied into this repository.
+The hosted runtime is one Render Node web service: API, authenticated Sendblue webhook, and durable
+inbox/outbox worker. Copy `.env.sendblue.example` to
+`apps/companion/.env.sendblue.local` only for local development; configure production secrets in
+Render. Keep `MESSAGING_LIVE_ENABLED=false` until migrations, health, authentication, and fake tests
+pass.
+
+Sendblue cannot disable SMS fallback at the account level. Before every live outbound request the
+adapter calls Sendblue's service lookup and proceeds only when it reports `iMessage`; response and
+webhook downgrade checks then stop the session if Sendblue still reports a fallback.
+
+The partner's existing Telegram agent behavior must move behind `ConversationAgent`. Telegram
+transport calls do not move: the agent returns validated outbound intents, and the messaging worker
+alone reserves and calls Sendblue. The deterministic implementation remains the integration fixture
+until that migration is connected. Add `ANTHROPIC_API_KEY` only after the partner implementation is
+ready.
+
+After deploying `render.yaml`, configure Sendblue `receive` and `outbound` webhooks to
+`https://<render-host>/webhooks/messaging/sendblue` using the same secret stored as
+`SENDBLUE_WEBHOOK_SECRET`. Account-level webhooks require application-side sender and line filters,
+which this service enforces. The operator command starts a fresh interaction and launches its first
+outbound intent:
 
 ```bash
-brew install beeper/tap/imessage-cli
-imessage-cli authorize all
-imessage-cli --json current-user
-cp .env.imessage.example .env.imessage.local
-# Edit only MSC_IMESSAGE_RECIPIENT in the ignored local file.
-
-pnpm db:migrate:supabase
-pnpm --filter @math-study-companion/api build
-pnpm api:start:supabase
+MSC_API_URL=https://<render-host> INTERNAL_API_TOKEN=<token> pnpm demo:sendblue
 ```
 
-With the API still running, use a second terminal. The runner creates a fresh `judge-<UUID>`
-interaction by default so rehearsals never need to delete hosted data:
-
-```bash
-caffeinate -i pnpm demo:imessage
-# Copy interactionId from the runner's final JSON output.
-curl -s http://127.0.0.1:3000/internal/demo/<interactionId> | jq
-curl -s http://127.0.0.1:3000/internal/demo/<interactionId>/events | jq
-curl -s http://127.0.0.1:3000/internal/demo/profile | jq
-```
-
-`MSC_INTERACTION_ID` may pin a readable ID for one clean recording, but it must be unused. The
-cleanup command is deliberately local-only: it refuses non-local database hosts and accepts only
-`demo-001`. Hosted Supabase is never reset, truncated, or used as a test fixture. The live demo is
-manual and single-user; CI uses the fake provider.
+For the controlled phone test, enable `MESSAGING_LIVE_ENABLED=true`, launch one interaction, reply
+from only the configured recipient, verify delivery remains iMessage, replay the webhook to prove
+deduplication, and inspect the authenticated interaction/events/messaging routes. Disable live
+messaging immediately afterward. Automated tests never call Sendblue, Render, or hosted Supabase.

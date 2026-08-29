@@ -1,5 +1,12 @@
 export { checkCanonicalAnswer, type AnswerVerdict } from './answer-check.js';
 export {
+  DeterministicDemoAgent,
+  type AgentInboundTurnInput,
+  type AgentSessionStartInput,
+  type ConversationAgent,
+  type ConversationHistoryItem,
+} from './agent.js';
+export {
   CANONICAL_FEEDBACK,
   CANONICAL_QUESTION,
   runCanonicalInteraction,
@@ -19,6 +26,15 @@ export {
   type IMessageCliOptions,
   type IMessageCommandRunner,
 } from './messaging/imessage-cli.js';
+export {
+  normalizeSendblueWebhook,
+  SendblueError,
+  SendblueMessagingProvider,
+  verifySendblueWebhookSecret,
+  type NormalizedSendblueWebhook,
+  type SendblueErrorKind,
+  type SendblueProviderOptions,
+} from './messaging/sendblue.js';
 export {
   IdempotencyLedger,
   type InboundMessageEvent,

@@ -69,6 +69,9 @@ importers:
       '@math-study-companion/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@math-study-companion/conversation':
+        specifier: workspace:*
+        version: link:../../packages/conversation
       '@math-study-companion/database':
         specifier: workspace:*
         version: link:../../packages/database

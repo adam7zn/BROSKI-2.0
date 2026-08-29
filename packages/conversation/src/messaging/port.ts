@@ -6,7 +6,7 @@ export interface OutboundText {
 
 export interface OutboundImage {
   conversationId: string;
-  mediaPath: string;
+  mediaUrl: string;
   altText: string;
   caption?: string;
   idempotencyKey: string;

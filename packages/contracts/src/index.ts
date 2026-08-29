@@ -1,5 +1,8 @@
 export {
+  agentOutboundIntentSchema,
   backendToConversationSchema,
+  conversationAgentOutputSchema,
+  conversationAgentStatusSchema,
   conversationToBackendSchema,
   demoInteractionIdSchema,
   demoMessageDirectionSchema,
@@ -11,7 +14,10 @@ export {
   studyModeSchema,
 } from './contracts.js';
 export type {
+  AgentOutboundIntent,
   BackendToConversation,
+  ConversationAgentOutput,
+  ConversationAgentStatus,
   ConversationToBackend,
   DemoMessageDirection,
   DemoMessageEventInput,

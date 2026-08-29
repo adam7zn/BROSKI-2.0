@@ -7,5 +7,6 @@ coverage/
 .env.*
 !.env.example
 !.env.imessage.example
+!.env.sendblue.example
 
 .DS_Store
