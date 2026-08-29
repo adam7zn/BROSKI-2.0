@@ -20,6 +20,13 @@ function stubFetch(responses: unknown[]) {
   const calls: Call[] = [];
   const impl = (async (url: string | URL | Request, init?: RequestInit) => {
     const href = String(url);
+    // The file download is a plain GET against /file/bot<token>/<path>.
+    if (href.includes('/file/bot')) {
+      return new Response(new Uint8Array([1, 2, 3]), {
+        status: 200,
+        headers: { 'content-type': 'image/jpeg' },
+      });
+    }
     calls.push({
       method: href.slice(href.lastIndexOf('/') + 1),
       body: JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>,
@@ -166,4 +173,88 @@ test('polling yields allowed chats only and advances the offset past every updat
   assert.equal(calls[0]?.body['offset'], 0);
   // The ignored stranger update must still move the cursor forward.
   assert.equal(calls[1]?.body['offset'], 12);
+});
+
+test('a photo arrives as an attachment, with its caption as the text', () => {
+  const event = normalizeTelegramUpdate({
+    update_id: 20,
+    message: {
+      message_id: 200,
+      date: Math.floor(Date.now() / 1000),
+      caption: 'här är planeringen',
+      chat: { id: 555, type: 'private' },
+      photo: [
+        { file_id: 'small', width: 90, height: 120, file_size: 900 },
+        { file_id: 'large', width: 900, height: 1200, file_size: 90_000 },
+      ],
+    },
+  });
+
+  assert.equal(event?.text, 'här är planeringen');
+  assert.equal(event?.attachments.length, 1);
+  // Telegram sends several sizes; only the largest is worth reading text off.
+  assert.equal(event?.attachments[0]?.providerFileId, 'large');
+  assert.equal(event?.attachments[0]?.kind, 'photo');
+});
+
+test('a PDF arrives as a document with its name and type', () => {
+  const event = normalizeTelegramUpdate({
+    update_id: 21,
+    message: {
+      message_id: 210,
+      date: Math.floor(Date.now() / 1000),
+      chat: { id: 555, type: 'private' },
+      document: {
+        file_id: 'doc-1',
+        file_name: 'planering-ht26.pdf',
+        mime_type: 'application/pdf',
+        file_size: 120_000,
+      },
+    },
+  });
+
+  assert.equal(event?.attachments[0]?.kind, 'document');
+  assert.equal(event?.attachments[0]?.fileName, 'planering-ht26.pdf');
+  assert.equal(event?.attachments[0]?.mimeType, 'application/pdf');
+  // A file with no caption still counts as a message worth acting on.
+  assert.equal(event?.text, '');
+});
+
+test('a message with neither words nor a file is ignored', () => {
+  assert.equal(
+    normalizeTelegramUpdate({
+      update_id: 22,
+      message: {
+        message_id: 220,
+        date: 0,
+        chat: { id: 555, type: 'private' },
+      },
+    }),
+    null,
+  );
+});
+
+test('an attachment is downloaded through getFile', async () => {
+  const { impl, calls } = stubFetch([
+    { ok: true, result: { file_path: 'photos/file_1.jpg' } },
+  ]);
+  const telegram = new TelegramMessagingProvider({
+    token: TOKEN,
+    allowedConversationIds: ['555'],
+    fetchImpl: impl,
+  });
+
+  const file = await telegram.downloadAttachment({
+    kind: 'photo',
+    providerFileId: 'large',
+    fileName: null,
+    mimeType: 'image/jpeg',
+    sizeBytes: 90_000,
+  });
+
+  assert.equal(calls[0]?.method, 'getFile');
+  assert.deepEqual(calls[0]?.body, { file_id: 'large' });
+  assert.equal(file.mimeType, 'image/jpeg');
+  assert.equal(file.fileName, 'file_1.jpg');
+  assert.ok(file.bytes instanceof Uint8Array);
 });

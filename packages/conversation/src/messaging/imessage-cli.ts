@@ -132,6 +132,8 @@ export class IMessageCliProvider implements MessagingProvider, InboundSource {
           senderAddress: message.senderId || this.#recipient,
           text: message.text,
           receivedAt: timestampToIso(message.timestamp, this.#now()),
+          // The CLI reads text messages only; attachments arrive as nothing.
+          attachments: [],
         };
       }
       await abortableDelay(this.#pollIntervalMs, options.signal);

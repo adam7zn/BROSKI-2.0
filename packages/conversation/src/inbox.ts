@@ -78,10 +78,24 @@ export class ReplyInbox {
     });
   }
 
-  /** Pumps a transport into this inbox until the signal aborts. */
-  async pump(source: InboundSource, signal?: AbortSignal): Promise<void> {
+  /**
+   * Pumps a transport into this inbox until the signal aborts.
+   *
+   * `intercept` sees every event first and returns true for the ones it has
+   * dealt with — an uploaded photo, say, which is not an answer to any
+   * question and must not be correlated with one. There is exactly one listener
+   * per transport: a second concurrent one would race it for the same messages.
+   */
+  async pump(
+    source: InboundSource,
+    signal?: AbortSignal,
+    options: {
+      intercept?: (event: InboundMessageEvent) => boolean | Promise<boolean>;
+    } = {},
+  ): Promise<void> {
     const listenOptions = signal ? { signal } : {};
     for await (const event of source.listen(listenOptions)) {
+      if (options.intercept && (await options.intercept(event))) continue;
       this.push(event);
     }
   }

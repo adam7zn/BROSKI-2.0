@@ -1,5 +1,6 @@
 import {
   IdempotencyLedger,
+  type InboundAttachment,
   type InboundMessageEvent,
   type InboundSource,
   type MessagingProvider,
@@ -52,7 +53,11 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
   senderAddress = 'fake-student';
 
   /** Simulates the student sending a reply. */
-  deliver(conversationId: string, text: string): InboundMessageEvent {
+  deliver(
+    conversationId: string,
+    text: string,
+    attachments?: InboundAttachment[],
+  ): InboundMessageEvent {
     this.#counter += 1;
     const event: InboundMessageEvent = {
       provider: this.name,
@@ -62,6 +67,7 @@ export class FakeMessagingProvider implements MessagingProvider, InboundSource {
       senderAddress: this.senderAddress,
       text,
       receivedAt: new Date().toISOString(),
+      attachments: attachments ?? [],
     };
     this.#queue.push(event);
     this.#waiting?.();

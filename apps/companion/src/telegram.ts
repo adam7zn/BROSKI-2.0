@@ -2,12 +2,16 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
+  ClaudeDocumentReader,
   ReplyInbox,
   TelegramMessagingProvider,
   runInteraction,
+  type DocumentReader,
+  type InboundMessageEvent,
 } from '@math-study-companion/conversation';
 
 import { describeEnvKeys, readConfig, repoRoot } from './config.js';
+import { handleUpload } from './handle-upload.js';
 import { ensureProfile } from './setup-gate.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
@@ -52,7 +56,22 @@ async function main(): Promise<void> {
     allowedConversationIds: [config.telegramChatId],
   });
   const inbox = new ReplyInbox();
-  const pump = inbox.pump(messaging, controller.signal);
+  // Photos and files are read out of band; they are never an answer to a
+  // question, so they must not reach the reply inbox.
+  const reader: DocumentReader | null = config.hasModelKey
+    ? new ClaudeDocumentReader()
+    : null;
+  const pump = inbox.pump(messaging, controller.signal, {
+    intercept: (event) =>
+      handleAttachments({
+        event,
+        messaging,
+        reader,
+        store,
+        config,
+        conversationId: config.telegramChatId,
+      }),
+  });
   pump.catch((error: unknown) => {
     console.error('Inbound listener stopped:', describe(error));
     controller.abort();
@@ -73,6 +92,9 @@ async function main(): Promise<void> {
       },
     });
     console.log(`\nTalking to ${profile.displayName}.`);
+    console.log(
+      'Send a photo of your term plan, schedule, or an assignment and I will read it.',
+    );
 
     do {
       const planned = planNextInteraction(
@@ -159,6 +181,62 @@ async function discoverChatId(
     console.log(`chat id ${event.providerConversationId} — "${event.text}"`);
     return;
   }
+}
+
+/**
+ * Deals with any photo or file on an incoming message.
+ *
+ * Returns true when the message was an upload and nothing else, so the inbox
+ * never sees it. A message with both a caption and a photo is handled here and
+ * still passed on, because the caption may well be the answer to a question.
+ */
+async function handleAttachments(input: {
+  event: InboundMessageEvent;
+  messaging: TelegramMessagingProvider;
+  reader: DocumentReader | null;
+  store: ReturnType<typeof openStore>;
+  config: ReturnType<typeof readConfig>;
+  conversationId: string;
+}): Promise<boolean> {
+  const { attachments } = input.event;
+  if (attachments.length === 0) return false;
+
+  const say = async (text: string, key: string): Promise<void> => {
+    await input.messaging.sendMessage({
+      conversationId: input.conversationId,
+      text,
+      idempotencyKey: `upload:${key}`,
+    });
+    console.log(`  broski     ${text}`);
+  };
+
+  if (!input.reader) {
+    await say(
+      'Jag kan inte läsa bilder just nu — ingen modellnyckel är inställd.',
+      `${input.event.providerMessageId}:no-reader`,
+    );
+    return input.event.text === '';
+  }
+
+  const profile = input.store.loadProfile(input.conversationId);
+  if (!profile) return false;
+
+  for (const attachment of attachments) {
+    console.log(`  upload     ${attachment.kind}`);
+    const { message } = await handleUpload({
+      attachment,
+      downloader: input.messaging,
+      reader: input.reader,
+      profile,
+      config: input.config,
+      store: input.store,
+      conversationId: input.conversationId,
+    });
+    await say(message, attachment.providerFileId);
+  }
+
+  // A photo with a caption may still be answering something.
+  return input.event.text === '';
 }
 
 function describe(error: unknown): string {

@@ -1,6 +1,9 @@
 import {
   IdempotencyLedger,
   UnsupportedMediaError,
+  type AttachmentDownloader,
+  type DownloadedAttachment,
+  type InboundAttachment,
   type InboundMessageEvent,
   type InboundSource,
   type MessagingProvider,
@@ -44,8 +47,22 @@ export interface TelegramUpdate {
     message_id: number;
     date: number;
     text?: string;
+    caption?: string;
     from?: { id: number };
     chat: { id: number; type: string };
+    /** Telegram sends the same photo at several sizes, smallest first. */
+    photo?: Array<{
+      file_id: string;
+      file_size?: number;
+      width: number;
+      height: number;
+    }>;
+    document?: {
+      file_id: string;
+      file_name?: string;
+      mime_type?: string;
+      file_size?: number;
+    };
   };
 }
 
@@ -57,8 +74,13 @@ export function normalizeTelegramUpdate(
   update: TelegramUpdate,
 ): InboundMessageEvent | null {
   const message = update.message;
-  if (!message?.text) return null;
+  if (!message) return null;
   if (message.chat.type !== 'private') return null;
+
+  const attachments = readAttachments(message);
+  const text = message.text ?? message.caption ?? '';
+  // A message with neither words nor a file is nothing to act on.
+  if (text === '' && attachments.length === 0) return null;
 
   return {
     provider: 'telegram',
@@ -66,9 +88,41 @@ export function normalizeTelegramUpdate(
     providerMessageId: String(message.message_id),
     providerConversationId: String(message.chat.id),
     senderAddress: String(message.from?.id ?? message.chat.id),
-    text: message.text,
+    text,
     receivedAt: new Date(message.date * 1000).toISOString(),
+    attachments,
   };
+}
+
+function readAttachments(
+  message: NonNullable<TelegramUpdate['message']>,
+): InboundAttachment[] {
+  const attachments: InboundAttachment[] = [];
+
+  // Telegram offers several sizes; the last is the largest and the only one
+  // worth reading text off.
+  const largestPhoto = message.photo?.at(-1);
+  if (largestPhoto) {
+    attachments.push({
+      kind: 'photo',
+      providerFileId: largestPhoto.file_id,
+      fileName: null,
+      mimeType: 'image/jpeg',
+      sizeBytes: largestPhoto.file_size ?? null,
+    });
+  }
+
+  if (message.document) {
+    attachments.push({
+      kind: 'document',
+      providerFileId: message.document.file_id,
+      fileName: message.document.file_name ?? null,
+      mimeType: message.document.mime_type ?? null,
+      sizeBytes: message.document.file_size ?? null,
+    });
+  }
+
+  return attachments;
 }
 
 /**
@@ -79,7 +133,7 @@ export function normalizeTelegramUpdate(
  * whole inbound contract.
  */
 export class TelegramMessagingProvider
-  implements MessagingProvider, InboundSource
+  implements MessagingProvider, InboundSource, AttachmentDownloader
 {
   readonly name = 'telegram';
 
@@ -138,6 +192,41 @@ export class TelegramMessagingProvider
       acceptedAt: new Date().toISOString(),
       deduplicated: false,
     });
+  }
+
+  /**
+   * Fetches the bytes behind an attachment.
+   *
+   * The Bot API caps downloads at 20 MB, which a photo of a page is nowhere
+   * near; a larger file fails here rather than half-way through reading it.
+   */
+  async downloadAttachment(
+    attachment: InboundAttachment,
+  ): Promise<DownloadedAttachment> {
+    const file = await this.#call<{ file_path?: string; file_size?: number }>(
+      'getFile',
+      { file_id: attachment.providerFileId },
+    );
+    if (!file.file_path) {
+      throw new TelegramError('getFile', 200, 'no file path in response');
+    }
+
+    const response = await this.#fetch(
+      `${API_ROOT}/file/bot${this.#token}/${file.file_path}`,
+      { signal: AbortSignal.timeout(60_000) },
+    );
+    if (!response.ok) {
+      throw new TelegramError('getFile', response.status, 'download failed');
+    }
+
+    return {
+      bytes: new Uint8Array(await response.arrayBuffer()),
+      mimeType:
+        attachment.mimeType ??
+        response.headers.get('content-type') ??
+        'application/octet-stream',
+      fileName: attachment.fileName ?? file.file_path.split('/').at(-1) ?? null,
+    };
   }
 
   async *listen(

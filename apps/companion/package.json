@@ -11,7 +11,8 @@
     "chat": "node --disable-warning=ExperimentalWarning --import tsx src/chat.ts",
     "telegram": "node --disable-warning=ExperimentalWarning --import tsx src/telegram.ts",
     "inspect": "node --disable-warning=ExperimentalWarning --import tsx src/inspect.ts",
-    "onboard": "node --disable-warning=ExperimentalWarning --import tsx src/onboard.ts"
+    "onboard": "node --disable-warning=ExperimentalWarning --import tsx src/onboard.ts",
+    "upload": "node --disable-warning=ExperimentalWarning --import tsx src/upload.ts"
   },
   "dependencies": {
     "@math-study-companion/contracts": "workspace:*",

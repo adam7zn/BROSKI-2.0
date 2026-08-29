@@ -38,6 +38,34 @@ export interface SendResult {
   deduplicated: boolean;
 }
 
+/**
+ * A photo or file the student sent.
+ *
+ * Only the reference is carried around; the bytes are fetched on demand, so an
+ * unread attachment costs nothing and never sits in memory.
+ */
+export interface InboundAttachment {
+  kind: 'photo' | 'document';
+  /** The provider's own handle for the file. */
+  providerFileId: string;
+  fileName: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
+}
+
+export interface DownloadedAttachment {
+  bytes: Uint8Array;
+  mimeType: string;
+  fileName: string | null;
+}
+
+/** A provider that can hand over the bytes behind an attachment. */
+export interface AttachmentDownloader {
+  downloadAttachment(
+    attachment: InboundAttachment,
+  ): Promise<DownloadedAttachment>;
+}
+
 export interface InboundMessageEvent {
   provider: string;
   /** Provider's own event id, used to process each event at most once. */
@@ -48,6 +76,8 @@ export interface InboundMessageEvent {
   senderAddress: string;
   text: string;
   receivedAt: string;
+  /** Photos and files sent with the message. Usually empty. */
+  attachments: InboundAttachment[];
 }
 
 export interface MessagingProvider {

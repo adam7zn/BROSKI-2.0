@@ -246,6 +246,7 @@ test('the same provider event is only processed once', () => {
     providerConversationId: CONVERSATION,
     senderAddress: 'student',
     text: '4',
+    attachments: [],
     receivedAt: new Date().toISOString(),
   };
   assert.equal(inbox.push(event), true);
@@ -341,4 +342,55 @@ test('two messages sent in quick succession are both read, in order', async () =
   assert.equal(outcome.trace.studentTurns, 2);
   assert.equal(outcome.trace.hintsGiven, 1);
   stop();
+});
+
+test('an uploaded photo is intercepted and never read as an answer', async () => {
+  const messaging = new FakeMessagingProvider();
+  const inbox = new ReplyInbox();
+  const controller = new AbortController();
+  const intercepted: string[] = [];
+
+  void inbox.pump(messaging, controller.signal, {
+    intercept: (event) => {
+      if (event.attachments.length === 0) return false;
+      intercepted.push(event.attachments[0]!.providerFileId);
+      return event.text === '';
+    },
+  });
+
+  const agent = new ScriptedStudyAgent();
+  const question = await agent.askQuestion(context());
+  const run = runInteraction({
+    context: context(),
+    conversationId: CONVERSATION,
+    agent,
+    messaging,
+    inbox,
+    replyTimeoutMs: 2000,
+    followUpTimeoutMs: 2000,
+  });
+
+  await waitForSent(messaging, 1);
+  await sleep(5);
+  // A photo of the term plan, sent mid-question.
+  messaging.deliver(CONVERSATION, '', [
+    {
+      kind: 'photo',
+      providerFileId: 'plan-photo',
+      fileName: null,
+      mimeType: 'image/jpeg',
+      sizeBytes: 1000,
+    },
+  ]);
+  await sleep(10);
+  messaging.deliver(CONVERSATION, String(question.expectedAnswer));
+
+  const outcome = await run;
+  assert.deepEqual(intercepted, ['plan-photo']);
+  assert.equal(outcome.status, 'completed');
+  if (outcome.status !== 'completed') return;
+  // The photo did not become the answer, and did not consume the turn.
+  assert.equal(outcome.result.studentReply, String(question.expectedAnswer));
+  assert.equal(outcome.trace.studentTurns, 1);
+  controller.abort();
 });

@@ -113,6 +113,44 @@ The lesson times are written straight into `data/course-plan.json`. Their
 `covers` lists stay empty: which study item a given lesson teaches is still
 something only a person knows, and the companion does not invent it.
 
+## Sending it your school's plan
+
+Most schools hand out a plan for the term: which lesson covers what, which
+pages, when the test is. That sheet is the one thing this system cannot work out
+on its own, so the student can just photograph it.
+
+Send a photo or a PDF in Telegram, or try it locally:
+
+```bash
+pnpm upload data/planering.jpg
+```
+
+The companion reads it and says what it found:
+
+> Läste Planering Ma2c v. 35-43. Jag la in 14 lektioner med datum och vad de
+> handlar om. 3 rader saknade datum, så dem lade jag bara som områden att öva på.
+
+What it does with each kind of document:
+
+| Sent | What happens |
+|---|---|
+| Term plan | Dated lessons, each knowing which topic it covers, into `data/course-plan.json` |
+| Timetable | The same, where it states dates |
+| Assignment or a page of the book | The text becomes something to build questions from |
+| Anything else | It says what it sees and asks for the plan instead |
+
+Two rules it will not break. A row it cannot read is left out rather than
+filled in, and a week number is not a date — those rows become topics with no
+place in the calendar, and it says how many. When the photo was poor it uses
+what it got and tells the student to check it.
+
+Lesson times come from the timetable given during setup: a plan that says
+"tis 15/9" becomes a lesson at the time Tuesday lessons actually start. A day
+with no known lesson time falls back to 08:00 rather than inventing one.
+
+Reading a document needs `ANTHROPIC_API_KEY`. There is no offline way to read a
+photo, and the companion says so rather than pretending the picture was blurry.
+
 ## The study loop
 
 Two paths run today. The judge demo is the canonical one, scripted end to end
