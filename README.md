@@ -76,10 +76,25 @@ apps/companion/          runnable entry points: plan, chat, telegram, imessage
 
 ## First contact
 
-The companion introduces itself and asks what to call the student, then collects
-what it needs to be useful. `pnpm onboard` runs it on its own; `pnpm chat` and
-`pnpm telegram` run it automatically the first time they meet a conversation
-they have no profile for.
+The companion introduces itself and asks what to call the student, then gets to
+know them. `pnpm onboard` runs it on its own; `pnpm chat` and `pnpm telegram`
+run it automatically the first time they meet a conversation they have no
+profile for.
+
+With an API key this is a real conversation, not a form. One sentence can answer
+several questions at once — "jag heter William, går tvåan och läser matte 2c med
+5000+" is read as four things and none of them are asked about again — and as
+soon as it knows the course it asks for a photo of the school's term plan,
+because that one picture answers what the class is doing, when the lessons are,
+and when the test is. Told there is no such plan, it drops the idea and carries
+on.
+
+Without a key it falls back to a fixed questionnaire that needs no model at all.
+Both paths end in the same summary, and both write the same profile.
+
+Whatever the model reports is read by the same deterministic parsers either way:
+a course becomes `Ma2c` or stays as the student wrote it, "tis 9.15 och tors 13"
+becomes two lesson slots, and something vague becomes nothing at all.
 
 ```
 Broski: Hej! Jag heter Broski och ska plugga matte med dig. Vad ska jag kalla dig?

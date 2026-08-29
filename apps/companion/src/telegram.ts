@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import {
   ClaudeDocumentReader,
+  ModelCallError,
   ReplyInbox,
   TelegramMessagingProvider,
   runInteraction,
@@ -157,6 +158,20 @@ async function main(): Promise<void> {
       });
       if (!trigger) break;
     } while (!controller.signal.aborted);
+  } catch (error) {
+    if (error instanceof ModelCallError) {
+      // The student has already been told in their own words; this is for
+      // whoever is watching the terminal.
+      console.error(`\nStopped: ${error.message}`);
+      if (error.status === 401 || error.status === 403) {
+        console.error(
+          'Check ANTHROPIC_API_KEY in .env — that is what the API rejected.',
+        );
+      }
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
   } finally {
     controller.abort();
     store.close();

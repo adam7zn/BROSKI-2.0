@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { normaliseDifficulty, type BackendContext } from '../contracts.js';
 import { checkAnswer, type DeterministicVerdict } from './answer-check.js';
+import { parseStructured } from './model-call.js';
 import {
   MUST_RESOLVE_NOTE,
   NO_MORE_HINTS_NOTE,
@@ -44,14 +45,6 @@ const turnOutputSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-export class ModelOutputError extends Error {
-  constructor(step: 'askQuestion' | 'respond', cause?: unknown) {
-    super(`The model returned no schema-valid output for ${step}.`);
-    this.name = 'ModelOutputError';
-    this.cause = cause;
-  }
-}
-
 export interface ClaudeStudyAgentOptions {
   client?: Anthropic;
   model?: string;
@@ -72,34 +65,33 @@ export class ClaudeStudyAgent implements StudyAgent {
   }
 
   async askQuestion(context: BackendContext): Promise<GeneratedQuestion> {
-    const response = await this.#client.messages.parse({
-      model: this.#model,
-      max_tokens: 2000,
-      system: questionSystemPrompt(context.mode),
-      output_config: {
-        effort: 'low',
-        format: zodOutputFormat(questionOutputSchema),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            `Topic: ${context.topic}`,
-            `Difficulty: ${normaliseDifficulty(context.difficulty)}`,
-            context.reason ? `Why now: ${context.reason}` : '',
-            'Course material:',
-            context.sourceText,
-          ]
-            .filter(Boolean)
-            .join('\n'),
+    const parsed = await parseStructured<z.infer<typeof questionOutputSchema>>(
+      this.#client,
+      'askQuestion',
+      {
+        model: this.#model,
+        max_tokens: 2000,
+        system: questionSystemPrompt(context.mode),
+        output_config: {
+          effort: 'low',
+          format: zodOutputFormat(questionOutputSchema),
         },
-      ],
-    });
-
-    const parsed = response.parsed_output;
-    if (parsed === null || parsed === undefined) {
-      throw new ModelOutputError('askQuestion');
-    }
+        messages: [
+          {
+            role: 'user',
+            content: [
+              `Topic: ${context.topic}`,
+              `Difficulty: ${normaliseDifficulty(context.difficulty)}`,
+              context.reason ? `Why now: ${context.reason}` : '',
+              'Course material:',
+              context.sourceText,
+            ]
+              .filter(Boolean)
+              .join('\n'),
+          },
+        ],
+      },
+    );
 
     return {
       question: parsed.question.trim(),
@@ -121,44 +113,43 @@ export class ClaudeStudyAgent implements StudyAgent {
     );
     const hintsSpent = input.hintsGiven >= MAX_HINTS;
 
-    const response = await this.#client.messages.parse({
-      model: this.#model,
-      max_tokens: 4000,
-      system: [
-        RESPOND_SYSTEM_PROMPT,
-        input.canContinue ? '' : MUST_RESOLVE_NOTE,
-        input.canContinue && hintsSpent ? NO_MORE_HINTS_NOTE : '',
-      ]
-        .filter(Boolean)
-        .join('\n\n'),
-      output_config: {
-        effort: 'medium',
-        format: zodOutputFormat(turnOutputSchema),
-      },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            'Course material:',
-            input.context.sourceText,
-            '',
-            `Question asked: ${input.question.question}`,
-            `Expected answer: ${input.question.expectedAnswer ?? '(none — judge by rubric)'}`,
-            `Rubric: ${input.question.rubric}`,
-            `Hints already given: ${input.hintsGiven}`,
-            `Deterministic checker on his latest message: ${describeVerdict(verdict)}`,
-            '',
-            'The conversation so far:',
-            renderTranscript(input.transcript),
-          ].join('\n'),
+    const parsed = await parseStructured<z.infer<typeof turnOutputSchema>>(
+      this.#client,
+      'respond',
+      {
+        model: this.#model,
+        max_tokens: 4000,
+        system: [
+          RESPOND_SYSTEM_PROMPT,
+          input.canContinue ? '' : MUST_RESOLVE_NOTE,
+          input.canContinue && hintsSpent ? NO_MORE_HINTS_NOTE : '',
+        ]
+          .filter(Boolean)
+          .join('\n\n'),
+        output_config: {
+          effort: 'medium',
+          format: zodOutputFormat(turnOutputSchema),
         },
-      ],
-    });
-
-    const parsed = response.parsed_output;
-    if (parsed === null || parsed === undefined) {
-      throw new ModelOutputError('respond');
-    }
+        messages: [
+          {
+            role: 'user',
+            content: [
+              'Course material:',
+              input.context.sourceText,
+              '',
+              `Question asked: ${input.question.question}`,
+              `Expected answer: ${input.question.expectedAnswer ?? '(none — judge by rubric)'}`,
+              `Rubric: ${input.question.rubric}`,
+              `Hints already given: ${input.hintsGiven}`,
+              `Deterministic checker on his latest message: ${describeVerdict(verdict)}`,
+              '',
+              'The conversation so far:',
+              renderTranscript(input.transcript),
+            ].join('\n'),
+          },
+        ],
+      },
+    );
 
     let { intent, result, confidence } = parsed;
 

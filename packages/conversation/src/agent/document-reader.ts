@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 
 import type { DownloadedAttachment } from '../messaging/port.js';
+import { parseStructured } from './model-call.js';
 
 /**
  * Reads what a student photographed or uploaded.
@@ -137,7 +138,7 @@ export class ClaudeDocumentReader implements DocumentReader {
     const source = toContentBlock(file);
     const today = new Date().toISOString().slice(0, 10);
 
-    const response = await this.#client.messages.parse({
+    return parseStructured<DocumentReading>(this.#client, 'readDocument', {
       model: this.#model,
       max_tokens: 8000,
       system: SYSTEM_PROMPT,
@@ -159,12 +160,6 @@ export class ClaudeDocumentReader implements DocumentReader {
         },
       ],
     });
-
-    const parsed = response.parsed_output;
-    if (parsed === null || parsed === undefined) {
-      throw new Error('The model returned no schema-valid reading.');
-    }
-    return parsed;
   }
 }
 

@@ -1,4 +1,5 @@
 import {
+  runSmartSetup,
   runStudentSetup,
   type MessagingProvider,
   type ReplyInbox,
@@ -35,7 +36,11 @@ export async function ensureProfile(
   const existing = input.store.loadProfile(input.conversationId);
   if (existing) return existing;
 
-  const profile = await runStudentSetup({
+  // With a key the companion holds a real conversation; without one it falls
+  // back to the fixed questionnaire, which needs no model at all.
+  const runSetup = input.config.hasModelKey ? runSmartSetup : runStudentSetup;
+
+  const profile = await runSetup({
     interactionId: `setup-${Date.now()}`,
     conversationId: input.conversationId,
     messaging: input.messaging,

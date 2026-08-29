@@ -15,6 +15,8 @@ export * from './contracts.js';
 export * from './onboarding/parse.js';
 export * from './onboarding/steps.js';
 export * from './onboarding/student-setup.js';
+export * from './onboarding/smart-setup.js';
+export * from './agent/model-call.js';
 export * from './inbox.js';
 export * from './session.js';
 export * from './agent/types.js';

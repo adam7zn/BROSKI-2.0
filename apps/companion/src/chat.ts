@@ -3,6 +3,7 @@ import { stdin, stdout } from 'node:process';
 
 import {
   FakeMessagingProvider,
+  ModelCallError,
   ReplyInbox,
   runInteraction,
 } from '@math-study-companion/conversation';
@@ -98,6 +99,16 @@ async function main(): Promise<void> {
         `${outcome.trace.hintsGiven ? ` · ${outcome.trace.hintsGiven} hint(s)` : ''}]`,
     );
     console.log('Saved. Run "pnpm inspect" to see the record.');
+  } catch (error) {
+    if (error instanceof ModelCallError) {
+      console.error(`\nStopped: ${error.message}`);
+      if (error.status === 401 || error.status === 403) {
+        console.error('Check ANTHROPIC_API_KEY in .env.');
+      }
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
   } finally {
     readline.close();
     controller.abort();
