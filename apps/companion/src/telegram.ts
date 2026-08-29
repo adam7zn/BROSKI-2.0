@@ -110,11 +110,15 @@ async function main(): Promise<void> {
     );
 
     const pages = store.bookPages();
-    console.log(
-      pages.length > 0
-        ? `${pages.length} pages of the book indexed.`
-        : 'No book pages indexed yet — questions about the book will be declined.',
-    );
+    if (pages.length > 0) {
+      console.log(`${pages.length} pages of the book indexed.`);
+    } else {
+      console.log(
+        'NO BOOK INDEXED. Every question will be declined with "jag har ingen\n' +
+          'bok inlagd än" until the pages are read. In another terminal:\n' +
+          '  pnpm index-book chapter-1',
+      );
+    }
     console.log(
       '\nListening. Write anything to the bot, or "plugga" for a question.',
     );

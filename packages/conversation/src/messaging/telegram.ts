@@ -38,6 +38,15 @@ export interface TelegramOptions {
   allowedConversationIds: string[];
   pollTimeoutSeconds?: number;
   fetchImpl?: typeof fetch;
+  /**
+   * Whether to deliver messages that were already waiting when listening
+   * started. Off by default: Telegram holds undelivered updates for a day, so
+   * a companion that answers all of them replies to questions the student
+   * asked hours ago, several at once. Tests turn it on.
+   */
+  deliverBacklog?: boolean;
+  /** Overridable so a test can decide what counts as "already waiting". */
+  now?: () => Date;
 }
 
 /** Raw update shape, narrowed to the fields the companion uses. */
@@ -142,6 +151,8 @@ export class TelegramMessagingProvider
   readonly #pollSeconds: number;
   readonly #fetch: typeof fetch;
   readonly #ledger = new IdempotencyLedger();
+  readonly #deliverBacklog: boolean;
+  readonly #startedAt: Date;
   #offset = 0;
 
   constructor(options: TelegramOptions) {
@@ -152,6 +163,8 @@ export class TelegramMessagingProvider
     this.#allowed = new Set(options.allowedConversationIds);
     this.#pollSeconds = options.pollTimeoutSeconds ?? DEFAULT_POLL_SECONDS;
     this.#fetch = options.fetchImpl ?? fetch;
+    this.#deliverBacklog = options.deliverBacklog ?? false;
+    this.#startedAt = (options.now ?? (() => new Date()))();
   }
 
   allows(conversationId: string): boolean {
@@ -266,11 +279,27 @@ export class TelegramMessagingProvider
         // update type cannot wedge the poll loop.
         this.#offset = Math.max(this.#offset, update.update_id + 1);
         const event = normalizeTelegramUpdate(update);
-        if (event && this.allows(event.providerConversationId)) {
-          yield event;
+        if (!event || !this.allows(event.providerConversationId)) continue;
+        if (!this.#deliverBacklog && this.#isBacklog(event)) {
+          // Answering it now would be answering something already given up on.
+          continue;
         }
+        yield event;
       }
     }
+  }
+
+  /**
+   * Sent before this process started listening.
+   *
+   * Telegram timestamps are whole seconds, so the cutoff is the start of the
+   * second we began in: without that, a message sent moments after startup
+   * carries a timestamp fractionally earlier than the start and would be
+   * discarded as old.
+   */
+  #isBacklog(event: InboundMessageEvent): boolean {
+    const cutoff = Math.floor(this.#startedAt.getTime() / 1000) * 1000;
+    return Date.parse(event.receivedAt) < cutoff;
   }
 
   async #call<T>(

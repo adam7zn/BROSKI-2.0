@@ -273,6 +273,10 @@ Every message that arrives is printed in the terminal as `<- hej`. If you write
 to the bot and nothing appears there, the message never reached this process:
 the wrong chat id, the wrong bot, or `pnpm telegram` is not running.
 
+Messages that were already waiting when the runner started are not answered.
+Telegram holds undelivered updates for a day, so a companion that replied to
+all of them would answer four questions at once, hours after they were asked.
+
 Unlike the iMessage path, this needs no Mac and no awake machine beyond the one
 running the command.
 

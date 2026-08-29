@@ -258,3 +258,114 @@ test('an attachment is downloaded through getFile', async () => {
   assert.equal(file.fileName, 'file_1.jpg');
   assert.ok(file.bytes instanceof Uint8Array);
 });
+
+test('messages waiting since before startup are not answered', async () => {
+  const startedAt = new Date('2026-08-30T01:53:00Z');
+  const old = Math.floor(startedAt.getTime() / 1000) - 3600;
+  const fresh = Math.floor(startedAt.getTime() / 1000) + 10;
+
+  const { impl } = stubFetch([
+    {
+      ok: true,
+      result: [
+        // Four "hej" sent while nothing was running, and one sent just now.
+        {
+          update_id: 1,
+          message: {
+            message_id: 1,
+            date: old,
+            text: 'hej',
+            chat: { id: 555, type: 'private' },
+          },
+        },
+        {
+          update_id: 2,
+          message: {
+            message_id: 2,
+            date: old,
+            text: 'hej',
+            chat: { id: 555, type: 'private' },
+          },
+        },
+        {
+          update_id: 3,
+          message: {
+            message_id: 3,
+            date: old,
+            text: 'hej',
+            chat: { id: 555, type: 'private' },
+          },
+        },
+        {
+          update_id: 4,
+          message: {
+            message_id: 4,
+            date: fresh,
+            text: 'hej igen',
+            chat: { id: 555, type: 'private' },
+          },
+        },
+      ],
+    },
+    { ok: true, result: [] },
+  ]);
+
+  const telegram = new TelegramMessagingProvider({
+    token: TOKEN,
+    allowedConversationIds: ['555'],
+    fetchImpl: impl,
+    pollTimeoutSeconds: 0,
+    now: () => startedAt,
+  });
+
+  const controller = new AbortController();
+  const seen: string[] = [];
+  setTimeout(() => controller.abort(), 50);
+  for await (const event of telegram.listen({ signal: controller.signal })) {
+    seen.push(event.text);
+  }
+
+  // Only the message sent after listening began.
+  assert.deepEqual(seen, ['hej igen']);
+});
+
+test('a test can ask for the backlog when it wants it', async () => {
+  const startedAt = new Date('2026-08-30T01:53:00Z');
+  const old = Math.floor(startedAt.getTime() / 1000) - 3600;
+
+  const { impl } = stubFetch([
+    {
+      ok: true,
+      result: [
+        {
+          update_id: 1,
+          message: {
+            message_id: 1,
+            date: old,
+            text: 'gammalt',
+            chat: { id: 555, type: 'private' },
+          },
+        },
+      ],
+    },
+    { ok: true, result: [] },
+  ]);
+
+  const telegram = new TelegramMessagingProvider({
+    token: TOKEN,
+    allowedConversationIds: ['555'],
+    fetchImpl: impl,
+    pollTimeoutSeconds: 0,
+    deliverBacklog: true,
+    now: () => startedAt,
+  });
+
+  const controller = new AbortController();
+  const seen: string[] = [];
+  setTimeout(() => controller.abort(), 50);
+  for await (const event of telegram.listen({ signal: controller.signal })) {
+    seen.push(event.text);
+  }
+
+  assert.deepEqual(seen, ['gammalt']);
+});
