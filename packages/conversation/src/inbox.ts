@@ -39,7 +39,31 @@ export class ReplyInbox {
     return true;
   }
 
-  /** Resolves with the next reply, or null on timeout or abort. */
+  /**
+   * The next message from this conversation, whenever it arrived.
+   *
+   * Use this whenever the point is "what did they say next" rather than "did
+   * they answer that question". Reaching for `waitFor` with a fresh `new Date()`
+   * looks equivalent and is not: it throws away anything sent while the
+   * companion was busy composing the previous reply.
+   */
+  next(
+    conversationId: string,
+    options: { timeoutMs: number; signal?: AbortSignal },
+  ): Promise<InboundMessageEvent | null> {
+    return this.waitFor(conversationId, {
+      notBefore: new Date(0),
+      timeoutMs: options.timeoutMs,
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  }
+
+  /**
+   * The next reply that arrived after `notBefore`.
+   *
+   * For correlating an answer with the question it answers: a message sent
+   * before the question went out is not an answer to it.
+   */
   async waitFor(
     conversationId: string,
     options: { notBefore: Date; timeoutMs: number; signal?: AbortSignal },

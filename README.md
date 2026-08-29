@@ -266,7 +266,12 @@ never recorded as a wrong answer.
 2. `cp .env.example .env` and paste the token into `TELEGRAM_BOT_TOKEN`.
 3. `pnpm telegram` — it prints the chat id of whoever writes to the bot.
 4. Put that id in `TELEGRAM_ALLOWED_CHAT_ID`; every other chat is ignored.
-5. `pnpm telegram` again to run one interaction, `-- --loop` to keep serving.
+5. `pnpm telegram` again — it serves until you stop it. `-- --once` answers a
+   single message and exits.
+
+Every message that arrives is printed in the terminal as `<- hej`. If you write
+to the bot and nothing appears there, the message never reached this process:
+the wrong chat id, the wrong bot, or `pnpm telegram` is not running.
 
 Unlike the iMessage path, this needs no Mac and no awake machine beyond the one
 running the command.

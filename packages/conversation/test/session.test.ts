@@ -394,3 +394,42 @@ test('an uploaded photo is intercepted and never read as an answer', async () =>
   assert.equal(outcome.trace.studentTurns, 1);
   controller.abort();
 });
+
+test('a message sent while the companion was busy is still read', async () => {
+  const messaging = new FakeMessagingProvider();
+  const inbox = new ReplyInbox();
+  const controller = new AbortController();
+  void inbox.pump(messaging, controller.signal);
+
+  // He writes twice while the companion is off composing an answer.
+  messaging.deliver(CONVERSATION, 'hej');
+  await sleep(5);
+  messaging.deliver(CONVERSATION, 'är du där?');
+  await sleep(5);
+
+  // A chat loop asks for "the next thing he said", not "anything after now".
+  const first = await inbox.next(CONVERSATION, { timeoutMs: 200 });
+  const second = await inbox.next(CONVERSATION, { timeoutMs: 200 });
+
+  assert.equal(first?.text, 'hej');
+  assert.equal(second?.text, 'är du där?');
+  controller.abort();
+});
+
+test('waiting from now still ignores what was said before the question', async () => {
+  const messaging = new FakeMessagingProvider();
+  const inbox = new ReplyInbox();
+  const controller = new AbortController();
+  void inbox.pump(messaging, controller.signal);
+
+  messaging.deliver(CONVERSATION, 'hej');
+  await sleep(5);
+
+  // Correlating an answer is the one case where the cutoff is right.
+  const reply = await inbox.waitFor(CONVERSATION, {
+    notBefore: new Date(),
+    timeoutMs: 60,
+  });
+  assert.equal(reply, null);
+  controller.abort();
+});

@@ -23,13 +23,15 @@ import { buildAgent, openStore, planNextInteraction } from './wire.js';
  * One real conversation over Telegram: ask what the timeline says is worth
  * asking, talk it through, judge the answer, store everything exactly once.
  *
- * `--loop` keeps serving after each interaction. `--force` asks even when the
- * planner would stay quiet. Starting is still manual — scheduling and quiet
- * hours belong to a later phase (`docs/PHASES.md` Phase 5).
+ * It keeps serving until stopped. `--once` answers a single message and exits;
+ * `--force` asks a study question even when the planner would stay quiet.
+ * Nothing is ever sent unprompted — scheduling and quiet hours belong to a
+ * later phase (`docs/PHASES.md` Phase 5).
  */
 async function main(): Promise<void> {
   const config = readConfig();
-  const keepServing = process.argv.includes('--loop');
+  // It is a chat partner, so serving until stopped is the normal thing to do.
+  const stopAfterOne = process.argv.includes('--once');
   const force = process.argv.includes('--force');
 
   if (!config.telegramToken) {
@@ -66,15 +68,22 @@ async function main(): Promise<void> {
     ? new ClaudeDocumentReader()
     : null;
   const pump = inbox.pump(messaging, controller.signal, {
-    intercept: (event) =>
-      handleAttachments({
+    intercept: (event) => {
+      console.log(
+        `  <- ${event.text || '(no text)'}` +
+          (event.attachments.length > 0
+            ? ` [${event.attachments.length} attachment(s)]`
+            : ''),
+      );
+      return handleAttachments({
         event,
         messaging,
         reader,
         store,
         config,
         conversationId: config.telegramChatId,
-      }),
+      });
+    },
   });
   pump.catch((error: unknown) => {
     console.error('Inbound listener stopped:', describe(error));
@@ -106,15 +115,17 @@ async function main(): Promise<void> {
         ? `${pages.length} pages of the book indexed.`
         : 'No book pages indexed yet — questions about the book will be declined.',
     );
-    console.log('\nWaiting. Write anything, or "plugga" for a question.\n');
+    console.log(
+      '\nListening. Write anything to the bot, or "plugga" for a question.',
+    );
+    console.log('Every message that arrives is logged here.\n');
 
     const history: TutorMessage[] = [];
 
     // The companion is a chat partner by default. A planned study interaction
     // takes over the conversation while it runs, and hands it back after.
     while (!controller.signal.aborted) {
-      const incoming = await inbox.waitFor(config.telegramChatId, {
-        notBefore: new Date(),
+      const incoming = await inbox.next(config.telegramChatId, {
         timeoutMs: 12 * 60 * 60 * 1000,
         signal: controller.signal,
       });
@@ -154,7 +165,7 @@ async function main(): Promise<void> {
             : '  [inte i boken]'),
       );
 
-      if (!keepServing) break;
+      if (stopAfterOne) break;
     }
   } catch (error) {
     if (error instanceof ModelCallError) {
