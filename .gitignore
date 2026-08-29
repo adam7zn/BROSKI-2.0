@@ -6,6 +6,6 @@ coverage/
 .env
 .env.*
 !.env.example
+!.env.imessage.example
 
 .DS_Store
-

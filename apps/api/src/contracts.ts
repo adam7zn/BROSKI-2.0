@@ -1,6 +1,12 @@
 import {
   backendToConversationSchema,
   conversationToBackendSchema,
+  demoMessageEventInputSchema,
+  demoOutboundReservationInputSchema,
+  demoProfileInputSchema,
+  type DemoMessageEventInput,
+  type DemoOutboundReservationInput,
+  type DemoProfileInput,
 } from '@math-study-companion/contracts';
 
 import type { BackendContext, ConversationResult } from './domain.js';
@@ -21,6 +27,9 @@ export interface RuntimeSchema<T> {
 export interface DemoContracts {
   backendContext: RuntimeSchema<BackendContext>;
   conversationResult: RuntimeSchema<ConversationResult>;
+  demoProfile: RuntimeSchema<DemoProfileInput>;
+  messageEvent: RuntimeSchema<DemoMessageEventInput>;
+  outboundReservation: RuntimeSchema<DemoOutboundReservationInput>;
   source: 'packages/contracts';
 }
 
@@ -28,6 +37,9 @@ export function loadDemoContracts(): DemoContracts {
   return {
     backendContext: backendToConversationSchema,
     conversationResult: conversationToBackendSchema,
+    demoProfile: demoProfileInputSchema,
+    messageEvent: demoMessageEventInputSchema,
+    outboundReservation: demoOutboundReservationInputSchema,
     source: 'packages/contracts',
   };
 }

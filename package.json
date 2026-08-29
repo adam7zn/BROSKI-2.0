@@ -8,10 +8,27 @@
     "node": ">=22"
   },
   "scripts": {
+    "api:start": "pnpm --filter @math-study-companion/api start",
+    "admin:dev": "pnpm --filter @math-study-companion/admin dev",
+    "admin:build": "pnpm --filter @math-study-companion/admin build",
+    "review-api:dev": "pnpm --filter @math-study-companion/api review:dev",
+    "extract:chapter": "pnpm --filter @math-study-companion/ingestion extract",
+    "api:start:supabase": "node --env-file-if-exists=.env.supabase scripts/with-supabase-db.mjs apps/api/node_modules/.bin/tsx apps/api/dist/src/server.js",
+    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+    "db:down": "pnpm --filter @math-study-companion/database db:down",
+    "db:migrate": "pnpm --filter @math-study-companion/database db:migrate",
+    "db:migrate:supabase": "node --env-file-if-exists=.env.supabase scripts/with-supabase-db.mjs packages/database/node_modules/.bin/tsx packages/database/src/migrate.ts",
+    "db:up": "pnpm --filter @math-study-companion/database db:up",
+    "demo:postgres": "pnpm --filter @math-study-companion/api demo:postgres",
+    "demo:clear:local": "pnpm --filter @math-study-companion/api demo:clear --",
+    "demo:imessage": "node --env-file-if-exists=.env.imessage.local apps/companion/node_modules/tsx/dist/cli.mjs apps/companion/src/imessage-demo.ts",
+    "demo:supabase": "node --env-file-if-exists=.env.supabase apps/api/node_modules/tsx/dist/cli.mjs apps/api/src/demo-postgres.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
-    "test": "vitest run && pnpm --filter @math-study-companion/api test",
+    "test": "pnpm test:unit && pnpm test:postgres",
+    "test:postgres": "pnpm --filter @math-study-companion/database test && pnpm --filter @math-study-companion/api test:postgres",
+    "test:unit": "vitest run && pnpm --filter @math-study-companion/api test:unit && pnpm --filter @math-study-companion/conversation test && pnpm --filter @math-study-companion/companion test",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {

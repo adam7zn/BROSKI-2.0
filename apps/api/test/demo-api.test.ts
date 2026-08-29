@@ -8,6 +8,7 @@ import type {
   StoredDemoInteraction,
 } from '../src/domain.js';
 import type { LogEntry, Logger } from '../src/logger.js';
+import { createConfiguredDemoApp } from '../src/persistence.js';
 
 const canonicalResult: ConversationResult = {
   interactionId: 'demo-001',
@@ -24,6 +25,25 @@ afterEach(async () => {
 });
 
 describe('Phase 1 demo API', () => {
+  it('selects explicit memory persistence and never silently falls back from PostgreSQL', async () => {
+    const memory = await createConfiguredDemoApp({
+      environment: {
+        DATABASE_URL: 'postgresql://postgres@127.0.0.1:1/unreachable',
+        DEMO_REPOSITORY: 'memory',
+      },
+    });
+    assert.equal(memory.persistence, 'memory');
+    await memory.close();
+
+    await assert.rejects(
+      createConfiguredDemoApp({
+        environment: {
+          DATABASE_URL: 'postgresql://postgres@127.0.0.1:1/unreachable',
+        },
+      }),
+    );
+  });
+
   it('proves start -> result -> retrieve with one trace ID', async () => {
     const app = await startApp();
 
@@ -44,6 +64,8 @@ describe('Phase 1 demo API', () => {
         'Solve equations by applying the same operation to both sides.',
       difficulty: 'easy',
       image: null,
+      mode: 'PRACTISE',
+      reason: 'Manual judge MVP demonstration',
     });
 
     const result = await fetch(`${app.baseUrl}/internal/demo/demo-001/result`, {
@@ -67,6 +89,96 @@ describe('Phase 1 demo API', () => {
     const list = await fetch(`${app.baseUrl}/internal/demo`);
     assert.equal(list.status, 200);
     assert.deepEqual(await list.json(), { interactions: [saved] });
+  });
+
+  it('stores the profile and deduplicates reservations and message events', async () => {
+    const app = await startApp();
+    const traceId = 'judge-trace-001';
+    await fetch(`${app.baseUrl}/internal/demo/start`, {
+      method: 'POST',
+      headers: { 'x-trace-id': traceId },
+    });
+
+    const profile = await fetch(`${app.baseUrl}/internal/demo/profile`, {
+      method: 'PUT',
+      headers: {
+        'content-type': 'application/json',
+        'x-trace-id': traceId,
+      },
+      body: JSON.stringify({
+        course: 'Mathematics 3c',
+        selfAssessedLevel: 'okay',
+        previousGrade: 'C',
+      }),
+    });
+    assert.equal(profile.status, 200);
+    assert.equal((await profile.json()).profileId, 'demo-student');
+
+    const reservationPath = '/internal/demo/demo-001/outbound/reserve';
+    const reservation = { idempotencyKey: 'demo-001:question' };
+    assert.equal(
+      (await postJson(app.baseUrl, reservationPath, reservation)).status,
+      201,
+    );
+    const duplicateReservation = await postJson(
+      app.baseUrl,
+      reservationPath,
+      reservation,
+    );
+    assert.equal(duplicateReservation.status, 200);
+    assert.equal((await duplicateReservation.json()).outcome, 'duplicate');
+
+    const event = {
+      provider: 'imessage-cli',
+      direction: 'inbound',
+      eventType: 'received',
+      providerEventId: 'incoming-guid-1',
+      providerMessageId: 'incoming-guid-1',
+      idempotencyKey: null,
+      occurredAt: '2026-08-29T08:00:00.000Z',
+    };
+    const eventPath = '/internal/demo/demo-001/events';
+    assert.equal((await postJson(app.baseUrl, eventPath, event)).status, 201);
+    const duplicateEvent = await postJson(app.baseUrl, eventPath, event);
+    assert.equal(duplicateEvent.status, 200);
+    assert.equal((await duplicateEvent.json()).outcome, 'duplicate');
+
+    const savedProfile = await fetch(`${app.baseUrl}/internal/demo/profile`);
+    assert.equal(savedProfile.headers.get('x-trace-id'), traceId);
+    assert.equal((await savedProfile.json()).course, 'Mathematics 3c');
+    const events = await fetch(`${app.baseUrl}${eventPath}`);
+    const eventsBody = await events.json();
+    assert.equal(events.headers.get('x-trace-id'), traceId);
+    assert.equal(eventsBody.events.length, 1);
+
+    const invalidProfile = await fetch(`${app.baseUrl}/internal/demo/profile`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        course: 'Mathematics 3c',
+        selfAssessedLevel: 'expert',
+        previousGrade: null,
+      }),
+    });
+    assert.equal(invalidProfile.status, 400);
+    assert.equal((await invalidProfile.json()).code, 'INVALID_DEMO_PROFILE');
+  });
+
+  it('supports a fresh, validated judge-run interaction ID', async () => {
+    const app = await startApp();
+    const start = await fetch(
+      `${app.baseUrl}/internal/demo/start?interactionId=judge-rehearsal-001`,
+      { method: 'POST', headers: { 'x-trace-id': 'judge-run-trace' } },
+    );
+    assert.equal(start.status, 201);
+    assert.equal((await start.json()).interactionId, 'judge-rehearsal-001');
+
+    const invalid = await fetch(
+      `${app.baseUrl}/internal/demo/start?interactionId=${encodeURIComponent('not allowed')}`,
+      { method: 'POST' },
+    );
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json()).code, 'INVALID_INTERACTION_ID');
   });
 
   it('returns structured failures for duplicate start, invalid result, mismatch, and not found', async () => {
@@ -185,6 +297,8 @@ describe('Phase 1 demo API', () => {
           'Solve equations by applying the same operation to both sides.',
         difficulty: 'easy',
         image: '/static/demo-linear-equation.png',
+        mode: 'PRACTISE',
+        reason: 'Manual judge MVP demonstration',
       },
     });
     const valid = await fetch(`${withImage.baseUrl}/internal/demo/start`, {
@@ -203,6 +317,8 @@ describe('Phase 1 demo API', () => {
         sourceText: 'Source',
         difficulty: 'easy',
         image: 42,
+        mode: 'PRACTISE',
+        reason: 'Manual judge MVP demonstration',
       } as never,
     });
     const invalid = await fetch(

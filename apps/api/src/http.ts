@@ -6,6 +6,8 @@ import {
   type ServerResponse,
 } from 'node:http';
 
+import { demoInteractionIdSchema } from '@math-study-companion/contracts';
+
 import { AppError, type AppErrorPayload } from './errors.js';
 import type { Logger } from './logger.js';
 import { jsonLogger } from './logger.js';
@@ -45,7 +47,22 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
       }
 
       if (method === 'POST' && path === '/internal/demo/start') {
-        const interaction = await options.service.start(requestTraceId);
+        const requestedInteractionId = url.searchParams.get('interactionId');
+        if (
+          requestedInteractionId !== null &&
+          !demoInteractionIdSchema.safeParse(requestedInteractionId).success
+        ) {
+          throw new AppError(400, {
+            code: 'INVALID_INTERACTION_ID',
+            message: 'The requested interaction ID is invalid',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        const interaction = await options.service.start(
+          requestTraceId,
+          requestedInteractionId ?? undefined,
+        );
         interactionId = interaction.interactionId;
         respond(response, 201, interaction.context, interaction.traceId);
         log(
@@ -57,6 +74,39 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           path,
           201,
           interactionId,
+        );
+        return;
+      }
+
+      if (method === 'PUT' && path === '/internal/demo/profile') {
+        const profile = await options.service.saveProfile(
+          await readJson(request, requestTraceId),
+          requestTraceId,
+        );
+        respond(response, 200, profile, profile.traceId);
+        log(
+          logger,
+          'info',
+          'demo.profile_saved',
+          profile.traceId,
+          method,
+          path,
+          200,
+        );
+        return;
+      }
+
+      if (method === 'GET' && path === '/internal/demo/profile') {
+        const profile = await options.service.getProfile(requestTraceId);
+        respond(response, 200, profile, profile.traceId);
+        log(
+          logger,
+          'info',
+          'demo.profile_retrieved',
+          profile.traceId,
+          method,
+          path,
+          200,
         );
         return;
       }
@@ -89,6 +139,83 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           interactionId,
         );
         return;
+      }
+
+      const reserveMatch = path.match(
+        /^\/internal\/demo\/([^/]+)\/outbound\/reserve$/,
+      );
+      if (method === 'POST' && reserveMatch?.[1]) {
+        interactionId = decodeURIComponent(reserveMatch[1]);
+        const reservation = await options.service.reserveOutbound(
+          interactionId,
+          await readJson(request, requestTraceId),
+          requestTraceId,
+        );
+        const status = reservation.outcome === 'reserved' ? 201 : 200;
+        respond(
+          response,
+          status,
+          { outcome: reservation.outcome },
+          reservation.traceId,
+        );
+        log(
+          logger,
+          'info',
+          `demo.outbound_${reservation.outcome}`,
+          reservation.traceId,
+          method,
+          path,
+          status,
+          interactionId,
+        );
+        return;
+      }
+
+      const eventsMatch = path.match(/^\/internal\/demo\/([^/]+)\/events$/);
+      if (eventsMatch?.[1]) {
+        interactionId = decodeURIComponent(eventsMatch[1]);
+        if (method === 'POST') {
+          const recorded = await options.service.recordMessageEvent(
+            interactionId,
+            await readJson(request, requestTraceId),
+            requestTraceId,
+          );
+          const traceId =
+            recorded.outcome === 'recorded'
+              ? recorded.event.traceId
+              : recorded.traceId;
+          const status = recorded.outcome === 'recorded' ? 201 : 200;
+          respond(response, status, recorded, traceId);
+          log(
+            logger,
+            'info',
+            `demo.message_event_${recorded.outcome}`,
+            traceId,
+            method,
+            path,
+            status,
+            interactionId,
+          );
+          return;
+        }
+        if (method === 'GET') {
+          const listed = await options.service.listMessageEvents(
+            interactionId,
+            requestTraceId,
+          );
+          respond(response, 200, { events: listed.events }, listed.traceId);
+          log(
+            logger,
+            'info',
+            'demo.message_events_listed',
+            listed.traceId,
+            method,
+            path,
+            200,
+            interactionId,
+          );
+          return;
+        }
       }
 
       const getMatch = path.match(/^\/internal\/demo\/([^/]+)$/);

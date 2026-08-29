@@ -70,14 +70,15 @@ The first phases use only two shared payloads so both people can build independe
 
 ## Current milestone
 
-First prove each half independently, then connect this manually triggered loop:
+The Platform Phase 1 loop is persisted in Supabase. The active judge MVP connects that same
+canonical interaction to one real iMessage conversation:
 
 ```text
 backend context
-→ one simple question
+→ short onboarding and one simple question
 → student reply
 → useful feedback
-→ saved interaction
+→ saved profile, delivery events, and interaction
 ```
 
 See [Delivery phases](docs/PHASES.md) for implementation order. The [Initial backlog](docs/INITIAL_BACKLOG.md) is deferred reference material for later phases.
@@ -93,6 +94,68 @@ The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
 | Check formatting | `pnpm format:check` |
 | Lint | `pnpm lint` |
 | Typecheck | `pnpm typecheck` |
-| Run tests | `pnpm test` |
+| Start the local test PostgreSQL | `pnpm db:up` |
+| Apply migrations locally | `pnpm db:migrate` |
+| Run all tests (PostgreSQL must be running) | `pnpm test` |
+| Run every required check | `pnpm check` |
+| Build the API | `pnpm --filter @math-study-companion/api build` |
+| Extract Chapter 1 with Apple Vision | `swift scripts/structured-ocr.swift --input chapter-1 --output chapter-1/extracted/checkpoints` |
+| Assemble structured extraction JSON | `pnpm extract:chapter -- --checkpoints chapter-1/extracted/checkpoints --output chapter-1/extracted/chapter-1-structured.json --pix2tex` |
+| Import structured Chapter 1 content | `pnpm --filter @math-study-companion/database db:import-structured-chapter -- chapter-1/extracted/chapter-1-structured.json` |
+| Start local review API | `ADMIN_TOKEN=<local-token> pnpm review-api:dev` |
+| Start local review UI | `pnpm admin:dev` |
+| Apply migrations to Supabase | `pnpm db:migrate:supabase` |
+| Start the API with Supabase | `pnpm api:start:supabase` |
+| Run the canonical hosted demo | `pnpm demo:supabase` |
+| Clear only the local synthetic fixture | `pnpm demo:clear:local -- --confirm demo-001` |
+| Run the real iMessage demo | `caffeinate -i pnpm demo:imessage` |
 
-Copy `.env.example` to `.env` when local environment variables are needed. The example contains placeholders only; never commit real credentials.
+The hosted project is `Math Study Companion` (`leknhhxqqehwiaxvzwnt`) in `eu-west-1`. Deployments
+provide its complete `DATABASE_URL` as a secret. For local use, either copy `.env.example` to the
+ignored `.env.supabase` file and replace the password placeholder, or let the hosted scripts read the
+`math-study-companion-supabase-db` item from macOS Keychain. Never commit the password or connection
+URL. The API uses Supabase's IPv4 Session pooler with
+`sslmode=require&uselibpqcompat=true`; local Docker remains the isolated database for tests and CI.
+
+For the hosted Phase 1 Platform demonstration, build the API, run `pnpm db:migrate:supabase`, start
+it with `pnpm api:start:supabase`, and then run `pnpm demo:supabase`. Restart the API and retrieve
+`demo-001` again to confirm persistence. The canonical curl commands are in
+[`apps/api/README.md`](apps/api/README.md).
+
+For isolated checks, run `pnpm db:up`, `pnpm db:migrate`, and `pnpm check`, then stop the disposable
+service with `pnpm db:down`. CI follows this local path and never connects to Supabase.
+
+## Judge iMessage demo
+
+The real-message adapter uses the official
+[`imessage-cli`](https://github.com/beeper/platform-imessage) locally. Sign Messages.app on this Mac
+into the dedicated companion Apple ID and keep the demo phone on a separate identity. Apple
+credentials are never copied into this repository.
+
+```bash
+brew install beeper/tap/imessage-cli
+imessage-cli authorize all
+imessage-cli --json current-user
+cp .env.imessage.example .env.imessage.local
+# Edit only MSC_IMESSAGE_RECIPIENT in the ignored local file.
+
+pnpm db:migrate:supabase
+pnpm --filter @math-study-companion/api build
+pnpm api:start:supabase
+```
+
+With the API still running, use a second terminal. The runner creates a fresh `judge-<UUID>`
+interaction by default so rehearsals never need to delete hosted data:
+
+```bash
+caffeinate -i pnpm demo:imessage
+# Copy interactionId from the runner's final JSON output.
+curl -s http://127.0.0.1:3000/internal/demo/<interactionId> | jq
+curl -s http://127.0.0.1:3000/internal/demo/<interactionId>/events | jq
+curl -s http://127.0.0.1:3000/internal/demo/profile | jq
+```
+
+`MSC_INTERACTION_ID` may pin a readable ID for one clean recording, but it must be unused. The
+cleanup command is deliberately local-only: it refuses non-local database hosts and accepts only
+`demo-001`. Hosted Supabase is never reset, truncated, or used as a test fixture. The live demo is
+manual and single-user; CI uses the fake provider.

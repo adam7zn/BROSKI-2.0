@@ -1,6 +1,19 @@
-import type { DemoContracts } from './contracts.js';
+import { randomUUID } from 'node:crypto';
+
+import type {
+  DemoMessageEventInput,
+  DemoOutboundReservationInput,
+  DemoProfileInput,
+} from '@math-study-companion/contracts';
+
+import type { DemoContracts, RuntimeSchema } from './contracts.js';
 import { validateWithSchema } from './contracts.js';
-import type { BackendContext, StoredDemoInteraction } from './domain.js';
+import type {
+  BackendContext,
+  StoredDemoInteraction,
+  StoredDemoMessageEvent,
+  StoredDemoProfile,
+} from './domain.js';
 import { AppError } from './errors.js';
 import type { DemoInteractionRepository } from './repository.js';
 
@@ -24,10 +37,13 @@ export class DemoService {
     this.#now = options.now ?? (() => new Date());
   }
 
-  async start(traceId: string): Promise<StoredDemoInteraction> {
+  async start(
+    traceId: string,
+    interactionId = this.#contextFixture.interactionId,
+  ): Promise<StoredDemoInteraction> {
     const contextValidation = validateWithSchema(
       this.#contracts.backendContext,
-      this.#contextFixture,
+      { ...this.#contextFixture, interactionId },
     );
     if (!contextValidation.success) {
       throw new AppError(500, {
@@ -102,6 +118,18 @@ export class DemoService {
     );
 
     if (outcome === 'not_found') throw notFound(interactionId, requestTraceId);
+    if (outcome === 'id_mismatch') {
+      throw new AppError(409, {
+        code: 'INTERACTION_ID_MISMATCH',
+        message: 'Path and payload interaction IDs must match',
+        retryable: false,
+        traceId: await this.#traceFor(interactionId, requestTraceId),
+        details: {
+          pathInteractionId: interactionId,
+          payloadInteractionId: validation.data.interactionId,
+        },
+      });
+    }
     const saved = await this.#repository.findById(interactionId);
     if (!saved) throw notFound(interactionId, requestTraceId);
 
@@ -129,6 +157,120 @@ export class DemoService {
 
   async list(): Promise<StoredDemoInteraction[]> {
     return this.#repository.list();
+  }
+
+  async saveProfile(
+    payload: unknown,
+    traceId: string,
+  ): Promise<StoredDemoProfile> {
+    const profile = this.#validate<DemoProfileInput>(
+      this.#contracts.demoProfile,
+      payload,
+      'INVALID_DEMO_PROFILE',
+      'Demo profile failed contract validation',
+      traceId,
+    );
+    const stored: StoredDemoProfile = {
+      profileId: 'demo-student',
+      ...profile,
+      traceId,
+      completedAt: this.#now().toISOString(),
+    };
+    await this.#repository.saveProfile(stored);
+    return stored;
+  }
+
+  async getProfile(traceId: string): Promise<StoredDemoProfile> {
+    const profile = await this.#repository.findProfile();
+    if (profile) return profile;
+    throw new AppError(404, {
+      code: 'DEMO_PROFILE_NOT_FOUND',
+      message: 'The demo profile has not been completed',
+      retryable: false,
+      traceId,
+    });
+  }
+
+  async reserveOutbound(
+    interactionId: string,
+    payload: unknown,
+    requestTraceId: string,
+  ): Promise<{ outcome: 'reserved' | 'duplicate'; traceId: string }> {
+    const input = this.#validate<DemoOutboundReservationInput>(
+      this.#contracts.outboundReservation,
+      payload,
+      'INVALID_OUTBOUND_RESERVATION',
+      'Outbound reservation failed contract validation',
+      requestTraceId,
+    );
+    const interaction = await this.get(interactionId, requestTraceId);
+    const outcome = await this.#repository.reserveOutbound(
+      interactionId,
+      input.idempotencyKey,
+      interaction.traceId,
+      this.#now().toISOString(),
+    );
+    if (outcome === 'not_found') throw notFound(interactionId, requestTraceId);
+    return { outcome, traceId: interaction.traceId };
+  }
+
+  async recordMessageEvent(
+    interactionId: string,
+    payload: unknown,
+    requestTraceId: string,
+  ): Promise<
+    | { outcome: 'recorded'; event: StoredDemoMessageEvent }
+    | { outcome: 'duplicate'; traceId: string }
+  > {
+    const input = this.#validate<DemoMessageEventInput>(
+      this.#contracts.messageEvent,
+      payload,
+      'INVALID_MESSAGE_EVENT',
+      'Message event failed contract validation',
+      requestTraceId,
+    );
+    const interaction = await this.get(interactionId, requestTraceId);
+    const event: StoredDemoMessageEvent = {
+      id: randomUUID(),
+      interactionId,
+      traceId: interaction.traceId,
+      ...input,
+      recordedAt: this.#now().toISOString(),
+    };
+    const outcome = await this.#repository.recordMessageEvent(event);
+    if (outcome === 'not_found') throw notFound(interactionId, requestTraceId);
+    return outcome === 'recorded'
+      ? { outcome, event }
+      : { outcome, traceId: interaction.traceId };
+  }
+
+  async listMessageEvents(
+    interactionId: string,
+    requestTraceId: string,
+  ): Promise<{ traceId: string; events: StoredDemoMessageEvent[] }> {
+    const interaction = await this.get(interactionId, requestTraceId);
+    return {
+      traceId: interaction.traceId,
+      events: await this.#repository.listMessageEvents(interactionId),
+    };
+  }
+
+  #validate<T>(
+    schema: RuntimeSchema<T>,
+    payload: unknown,
+    code: string,
+    message: string,
+    traceId: string,
+  ): T {
+    const validation = validateWithSchema(schema, payload);
+    if (validation.success) return validation.data;
+    throw new AppError(400, {
+      code,
+      message,
+      retryable: false,
+      traceId,
+      details: { issues: validation.issues },
+    });
   }
 
   async #traceFor(

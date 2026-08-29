@@ -1,0 +1,20 @@
+{
+  "name": "@math-study-companion/companion",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo:imessage": "tsx src/imessage-demo.ts",
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@math-study-companion/contracts": "workspace:*",
+    "@math-study-companion/conversation": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.20.5",
+    "typescript": "^6.0.3"
+  }
+}

@@ -81,12 +81,14 @@ A single structured decision path is easier to test, trace, and improve for an M
 
 ## ADR-004 — PostgreSQL plus pgvector
 
-**Status:** PROPOSED  
+**Status:** ACCEPTED
 **Date:** 2026-08-28
 
 ### Decision
 
-Use PostgreSQL for domain state and `pgvector` for textbook retrieval in the same database, preferably through Supabase for MVP speed.
+Use Supabase-hosted PostgreSQL for runtime domain state and keep `pgvector` available for later
+textbook retrieval in the same database. Use disposable local PostgreSQL for development and CI
+integration tests.
 
 ### Reason
 
@@ -96,6 +98,8 @@ The data is relational and modest in scale. One operational database reduces com
 
 - embeddings and relational source provenance can be joined directly;
 - no separate vector database initially;
+- the API connects through a standard PostgreSQL repository and does not depend on the Supabase Data API;
+- runtime credentials stay in deployment secrets or ignored local environment files;
 - revisit only if retrieval scale or capability requires it.
 
 ---
@@ -124,7 +128,7 @@ The first mastery model will change. Raw evidence prevents irreversible informat
 
 ## ADR-006 — Provider-neutral messaging
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
 **Date:** 2026-08-28
 
 ### Decision
@@ -166,7 +170,7 @@ A shared type system simplifies two-person parallel development and contract tes
 
 ## ADR-008 — Shadow mode before autonomous messaging
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
 **Date:** 2026-08-28
 
 ### Decision
@@ -250,3 +254,73 @@ This provides one small, reproducible toolchain for both workstreams without cho
 - `pnpm-lock.yaml` is committed and CI uses `pnpm install --frozen-lockfile`;
 - workspace packages share root quality configuration;
 - API framework, database tooling, and deployment remain unresolved.
+
+---
+
+## ADR-010 — Fully local structured textbook extraction
+
+**Status:** ACCEPTED
+**Date:** 2026-08-29
+
+### Decision
+
+Chapter 1 extraction runs entirely on William's Mac. Apple Vision performs two
+document-recognition passes, and CPU-only pix2tex is restricted to suspected
+formula crops. PostgreSQL stores ordered blocks, immutable engine candidates,
+and append-only human reviews. No page or extracted block is sent to an API or
+hosted OCR service.
+
+### Reason
+
+The textbook is private, mathematics needs region-level evidence, and OCR
+confidence alone cannot establish correctness. A local, review-gated pipeline
+keeps the source on-device while preserving enough provenance to correct it.
+
+### Consequences
+
+- extraction requires macOS 26 Apple Vision and an isolated Python 3.11 pix2tex environment;
+- every meaningful block remains pending until explicit human review;
+- `source_pages.extracted_text` is rebuilt only from approved blocks;
+- the review API and admin app bind to localhost and require `ADMIN_TOKEN`;
+- source images and extraction JSON remain Git-visible by William's explicit request;
+- model caches and virtual environments remain machine-local dependencies.
+
+### Revisit when
+
+Apple Vision or pix2tex cannot reach acceptable accuracy on the chapter's
+golden pages, or the source is licensed for a different processing model.
+
+---
+
+## ADR-011 — Local iMessage CLI for the single-device judge demo
+
+**Status:** ACCEPTED
+**Date:** 2026-08-29
+
+### Decision
+
+Use Beeper's open-source `platform-imessage` release (`imessage-cli`) behind the
+provider-neutral messaging interface for the first real-message demonstration.
+The Mac uses a dedicated companion Apple identity and polls the configured
+one-to-one chat for one inbound reply. System Integrity Protection stays
+enabled, and Apple credentials remain in Messages.app and macOS Keychain.
+
+### Reason
+
+The judge MVP needs a real blue-bubble phone experience without adding a paid
+relay, public webhook, or provider account. The CLI supports the normal macOS
+security model and exposes structured send/read operations that can be isolated
+inside one adapter.
+
+### Consequences
+
+- the demo Mac must stay awake with Messages.app signed in;
+- macOS Messages Data, Accessibility, Contacts, and Automation permissions are required;
+- PostgreSQL reserves outbound idempotency keys before the CLI is called and stores normalized metadata without message bodies;
+- automated tests use the fake provider and never send a live message;
+- Canvas, scheduling, model-backed evaluation, and arbitrary tutoring remain out of scope.
+
+### Revisit when
+
+The pilot must run without an awake Mac, support more than one account, or meet
+delivery guarantees that the local CLI cannot provide.

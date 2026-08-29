@@ -8,16 +8,26 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "demo:clear": "tsx src/clear-demo.ts",
+    "demo:postgres": "tsx src/demo-postgres.ts",
     "dev": "tsx watch src/server.ts",
+    "review:dev": "tsx watch src/content-review-main.ts",
+    "review:start": "tsx dist/src/content-review-main.js",
     "start": "tsx dist/src/server.js",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "pnpm test:unit && pnpm test:postgres",
+    "test:postgres": "node --import tsx --test test/postgres-api.test.ts",
+    "test:unit": "node --import tsx --test test/demo-api.test.ts test/postgres-repository.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@math-study-companion/contracts": "workspace:*"
+    "@math-study-companion/contracts": "workspace:*",
+    "@math-study-companion/database": "workspace:*",
+    "pg": "^8.16.3",
+    "sharp": "^0.34.4"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.15.5",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }
