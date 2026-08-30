@@ -2,11 +2,10 @@ services:
   - type: web
     name: math-study-companion
     runtime: node
-    plan: starter
+    plan: free
     numInstances: 1
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @math-study-companion/api build
-    preDeployCommand: pnpm db:migrate
-    startCommand: pnpm --filter @math-study-companion/api start
+    startCommand: pnpm db:migrate && pnpm --filter @math-study-companion/api start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION

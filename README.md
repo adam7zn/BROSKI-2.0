@@ -257,7 +257,9 @@ from only the configured recipient, verify delivery remains iMessage, replay the
 deduplication, and inspect the authenticated interaction/events/messaging routes. Disable live
 messaging immediately afterward. Automated tests never call Sendblue, Render, or hosted Supabase.
 
-`render.yaml` has a migration pre-deploy command. Therefore the service must not be deployed until
+`render.yaml` uses Render's free web-service plan. Because Render reserves pre-deploy commands for
+paid services, the start command runs the checksum-verified, advisory-lock migration runner before
+starting the API. Therefore the service must not be deployed or restarted with new migrations until
 the read-only local-versus-hosted ledger report has been reviewed and the exact pending forward
 migrations have explicit approval. Likewise, changing `MESSAGING_LIVE_ENABLED` to `true` and running
 the operator command are separate approval-gated actions.
