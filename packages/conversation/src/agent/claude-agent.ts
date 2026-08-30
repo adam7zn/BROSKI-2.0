@@ -126,6 +126,26 @@ export class ClaudeStudyAgent implements StudyAgent {
     );
     const hintsSpent = input.hintsGiven >= MAX_HINTS;
 
+    // Exact verified answers do not need a probabilistic model judgment. This
+    // also keeps trusted mathematical evidence available when the provider is
+    // temporarily unavailable; Claude remains responsible for hints, unclear
+    // replies, and rubric-based evaluation.
+    if (verdict === 'match') {
+      return {
+        intent: 'feedback',
+        message: `Correct — ${input.question.expectedAnswer} is the verified answer.`,
+        status: 'resolved',
+        result: 'correct',
+        confidence: 1,
+        deterministic: true,
+        meta: {
+          agent: 'deterministic-answer-check',
+          promptVersion: RESPOND_PROMPT_VERSION,
+          model: null,
+        },
+      };
+    }
+
     const response = await this.#client.messages.parse({
       model: this.#model,
       max_tokens: 4000,
@@ -182,11 +202,7 @@ export class ClaudeStudyAgent implements StudyAgent {
 
     // A message that literally matches the expected answer is an answer,
     // whatever the model made of it (docs/RULES.md §3.2).
-    if (verdict === 'match') {
-      intent = 'feedback';
-      result = 'correct';
-      confidence = 1;
-    } else if (verdict === 'mismatch' && result === 'correct') {
+    if (verdict === 'mismatch' && result === 'correct') {
       result = 'incorrect';
       confidence = 1;
     }

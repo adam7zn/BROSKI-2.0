@@ -240,6 +240,30 @@ test('propagates Claude timeout and rate-limit failures without inventing feedba
   }
 });
 
+test('resolves an exact verified answer before calling Claude', async () => {
+  let modelCalled = false;
+  const agent = new ClaudeStudyAgent({
+    client: fakeAnthropicClient(async () => {
+      modelCalled = true;
+      throw new Error('Claude must not be called for an exact verified answer');
+    }),
+  });
+  const input = claudeRespondInput();
+  input.question.expectedAnswer = '-7';
+  input.transcript[input.transcript.length - 1] = {
+    role: 'student',
+    text: '-7',
+    at: '2026-08-30T08:01:00.000Z',
+  };
+
+  const turn = await agent.respond(input);
+
+  assert.equal(modelCalled, false);
+  assert.equal(turn.status, 'resolved');
+  assert.equal(turn.result, 'correct');
+  assert.equal(turn.deterministic, true);
+});
+
 test('rejects model output that exceeds the hint or turn limits', async () => {
   const hintAgent = new ClaudeStudyAgent({
     client: fakeAnthropicClient(async () => ({
