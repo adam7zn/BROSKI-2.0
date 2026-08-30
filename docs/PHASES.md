@@ -129,14 +129,15 @@ Use fake/local messaging for this phase. A real messaging provider is not requir
 
 ### Person A
 
-- put the existing conversation loop behind one real messaging adapter;
+- move the existing Telegram agent behavior behind `ConversationAgent` without moving Telegram transport calls;
+- put the conversation loop behind the hosted Sendblue adapter;
 - handle one inbound reply;
 - keep the wording short and predictable;
 - keep the fake adapter for tests.
 
 ### Person B
 
-- expose the backend to the messaging runtime;
+- host the API, authenticated Sendblue webhook, and durable worker as one Render service;
 - add basic secrets, logs, and delivery-event storage;
 - serve an image when the context contains one;
 - keep starting the interaction manually.

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "api:start": "pnpm --filter @math-study-companion/api start",
+    "hosted:start": "pnpm --filter @math-study-companion/api start",
     "admin:dev": "pnpm --filter @math-study-companion/admin dev",
     "admin:build": "pnpm --filter @math-study-companion/admin build",
     "review-api:dev": "pnpm --filter @math-study-companion/api review:dev",
@@ -21,7 +22,7 @@
     "db:up": "pnpm --filter @math-study-companion/database db:up",
     "demo:postgres": "pnpm --filter @math-study-companion/api demo:postgres",
     "demo:clear:local": "pnpm --filter @math-study-companion/api demo:clear --",
-    "demo:imessage": "node --env-file-if-exists=.env.imessage.local apps/companion/node_modules/tsx/dist/cli.mjs apps/companion/src/imessage-demo.ts",
+    "demo:sendblue": "node --env-file-if-exists=apps/companion/.env.sendblue.local apps/companion/node_modules/tsx/dist/cli.mjs apps/companion/src/sendblue-demo.ts",
     "demo:supabase": "node --env-file-if-exists=.env.supabase apps/api/node_modules/tsx/dist/cli.mjs apps/api/src/demo-postgres.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -37,7 +38,8 @@
     "onboard": "pnpm --filter @math-study-companion/companion onboard",
     "upload": "pnpm --filter @math-study-companion/companion upload",
     "index-book": "pnpm --filter @math-study-companion/companion index-book",
-    "ask": "pnpm --filter @math-study-companion/companion ask"
+    "ask": "pnpm --filter @math-study-companion/companion ask",
+    "imessage": "pnpm --filter @math-study-companion/companion imessage"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

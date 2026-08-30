@@ -247,7 +247,7 @@ golden pages, or the source is licensed for a different processing model.
 
 ## ADR-011 — Local iMessage CLI for the single-device judge demo
 
-**Status:** ACCEPTED
+**Status:** SUPERSEDED BY ADR-012
 **Date:** 2026-08-29
 
 ### Decision
@@ -425,6 +425,43 @@ so `npm run plan` can show a whole week ahead.
 The pilot shows the intervals are wrong for him, or the item chosen within a
 mode is regularly the wrong one.
 
+---
+
+## ADR-016 — Hosted Sendblue transport with an in-process agent port
+
+**Status:** ACCEPTED
+**Date:** 2026-08-29
+
+### Decision
+
+Run the Phase 3 real-message path as one Render Node web service containing the API, authenticated
+Sendblue webhook, and durable PostgreSQL inbox/outbox worker. Sendblue is the only live transport.
+The existing Telegram agent behavior migrates behind the in-process `ConversationAgent` interface;
+it must return validated intents and must not call either Telegram or Sendblue directly.
+
+### Reason
+
+The pilot must work without an awake Mac while preserving one coherent learning engine and
+at-most-once outbound behavior. Keeping transport ownership in the messaging worker allows the
+partner to reuse agent behavior without carrying Telegram-specific delivery, webhook, or secret
+handling into the hosted path.
+
+### Consequences
+
+- webhook requests use a separate secret; hosted internal routes use bearer authentication;
+- Sendblue account-level events are filtered to the configured participant and line;
+- session, minimized inbox, and outbox state are durably claimed and restart-safe;
+- stable idempotency keys are reserved before provider calls, and ambiguous sends are never retried;
+- SMS downgrade fails the session closed, while `MESSAGING_LIVE_ENABLED=false` is the default;
+- attachments require HTTPS media URLs, and the first live test remains text-only;
+- the deterministic agent remains the fake integration fixture until the partner ports the current
+  Telegram/Anthropic behavior and supplies `ANTHROPIC_API_KEY` through Render secrets;
+- automated tests use injected fake providers and never contact Sendblue or hosted PostgreSQL.
+
+### Revisit when
+
+The pilot needs multiple recipients, horizontal worker concurrency beyond one Render instance,
+provider failover, a supported Sendblue idempotency API, or a separately deployed agent process.
 ---
 
 # ADR template

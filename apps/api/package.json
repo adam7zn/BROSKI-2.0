@@ -16,11 +16,12 @@
     "start": "tsx dist/src/server.js",
     "test": "pnpm test:unit && pnpm test:postgres",
     "test:postgres": "node --import tsx --test test/postgres-api.test.ts",
-    "test:unit": "node --import tsx --test test/demo-api.test.ts test/postgres-repository.test.ts",
+    "test:unit": "node --import tsx --test test/demo-api.test.ts test/hosted-messaging.test.ts test/postgres-repository.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@math-study-companion/contracts": "workspace:*",
+    "@math-study-companion/conversation": "workspace:*",
     "@math-study-companion/database": "workspace:*",
     "pg": "^8.16.3",
     "sharp": "^0.34.4"

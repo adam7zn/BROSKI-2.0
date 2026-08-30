@@ -37,3 +37,5 @@ export {
   type IMessageCliOptions,
   type IMessageCommandRunner,
 } from './messaging/imessage-cli.js';
+export * from './messaging/sendblue.js';
+export * from './agent.js';

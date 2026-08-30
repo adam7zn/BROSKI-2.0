@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import {
   createServer,
   type IncomingMessage,
@@ -11,12 +11,16 @@ import { demoInteractionIdSchema } from '@math-study-companion/contracts';
 import { AppError, type AppErrorPayload } from './errors.js';
 import type { Logger } from './logger.js';
 import { jsonLogger } from './logger.js';
+import type { HostedMessagingService } from './hosted-messaging.js';
 import type { DemoService } from './service.js';
 
 const jsonBodyLimitBytes = 64 * 1024;
 
 export interface DemoHttpServerOptions {
   service: DemoService;
+  messaging?: HostedMessagingService;
+  internalApiToken?: string;
+  wakeMessagingWorker?: () => void;
   logger?: Logger;
 }
 
@@ -44,6 +48,42 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           200,
         );
         return;
+      }
+
+      if (method === 'POST' && path === '/webhooks/messaging/sendblue') {
+        if (!options.messaging) {
+          throw new AppError(404, {
+            code: 'ROUTE_NOT_FOUND',
+            message: 'Route not found',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        const suppliedSecret = singleHeader(
+          request.headers['sb-signing-secret'],
+        );
+        options.messaging.authenticateWebhook(suppliedSecret, requestTraceId);
+        const result = await options.messaging.ingestWebhook(
+          await readJson(request, requestTraceId),
+          suppliedSecret,
+          requestTraceId,
+        );
+        respond(response, 202, result, requestTraceId);
+        options.wakeMessagingWorker?.();
+        log(
+          logger,
+          'info',
+          `messaging.webhook_${result.outcome}`,
+          requestTraceId,
+          method,
+          path,
+          202,
+        );
+        return;
+      }
+
+      if (path.startsWith('/internal/')) {
+        authenticateInternal(request, options.internalApiToken, requestTraceId);
       }
 
       if (method === 'POST' && path === '/internal/demo/start') {
@@ -133,6 +173,67 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           'info',
           'demo.result_saved',
           interaction.traceId,
+          method,
+          path,
+          200,
+          interactionId,
+        );
+        return;
+      }
+
+      const launchMatch = path.match(/^\/internal\/demo\/([^/]+)\/launch$/);
+      if (method === 'POST' && launchMatch?.[1]) {
+        if (!options.messaging) {
+          throw new AppError(503, {
+            code: 'HOSTED_MESSAGING_NOT_CONFIGURED',
+            message: 'Hosted messaging is not configured',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        interactionId = decodeURIComponent(launchMatch[1]);
+        const session = await options.messaging.launch(
+          interactionId,
+          requestTraceId,
+        );
+        respond(response, 202, session, session.traceId);
+        options.wakeMessagingWorker?.();
+        log(
+          logger,
+          'info',
+          'messaging.session_launched',
+          session.traceId,
+          method,
+          path,
+          202,
+          interactionId,
+        );
+        return;
+      }
+
+      const messagingMatch = path.match(
+        /^\/internal\/demo\/([^/]+)\/messaging$/,
+      );
+      if (method === 'GET' && messagingMatch?.[1]) {
+        if (!options.messaging) {
+          throw new AppError(503, {
+            code: 'HOSTED_MESSAGING_NOT_CONFIGURED',
+            message: 'Hosted messaging is not configured',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        interactionId = decodeURIComponent(messagingMatch[1]);
+        const state = await options.messaging.inspect(
+          interactionId,
+          requestTraceId,
+        );
+        respond(response, 200, state, requestTraceId);
+        log(
+          logger,
+          'info',
+          'messaging.state_retrieved',
+          requestTraceId,
           method,
           path,
           200,
@@ -320,6 +421,45 @@ function traceIdFrom(request: IncomingMessage): string {
   return candidate && /^[A-Za-z0-9._:-]{1,128}$/.test(candidate)
     ? candidate
     : randomUUID();
+}
+
+function authenticateInternal(
+  request: IncomingMessage,
+  expectedToken: string | undefined,
+  traceId: string,
+): void {
+  if (expectedToken === undefined) return;
+  const authorization = singleHeader(request.headers.authorization);
+  const supplied = authorization?.startsWith('Bearer ')
+    ? authorization.slice('Bearer '.length)
+    : undefined;
+  if (!constantTimeEqual(supplied, expectedToken)) {
+    throw new AppError(401, {
+      code: 'INVALID_INTERNAL_AUTHENTICATION',
+      message: 'Internal API authentication failed',
+      retryable: false,
+      traceId,
+    });
+  }
+}
+
+function constantTimeEqual(
+  supplied: string | undefined,
+  expected: string,
+): boolean {
+  if (!supplied || !expected) return false;
+  const suppliedBytes = Buffer.from(supplied);
+  const expectedBytes = Buffer.from(expected);
+  return (
+    suppliedBytes.length === expectedBytes.length &&
+    timingSafeEqual(suppliedBytes, expectedBytes)
+  );
+}
+
+function singleHeader(
+  value: string | string[] | undefined,
+): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
 }
 
 function toAppError(error: unknown, traceId: string): AppError {

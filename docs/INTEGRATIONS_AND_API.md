@@ -242,6 +242,14 @@ POST /internal/interactions/:interactionId/cancel
 POST /webhooks/messaging/:provider
 ```
 
+The Phase 3 hosted route is `POST /webhooks/messaging/sendblue`. It compares the
+`sb-signing-secret` header in constant time, strictly normalizes message webhooks, allowlists the
+single configured participant and Sendblue line, and durably deduplicates by `message_handle`
+before acknowledging with 2xx. `SENT`, `DELIVERED`, and `ERROR` are stored as normalized delivery
+events. Because Sendblue cannot disable automatic SMS fallback, every outbound send first calls its
+service lookup and proceeds only for `iMessage`; SMS/RCS service or `was_downgraded: true` in the
+send response or webhook then fails the session closed.
+
 Rules:
 
 - verify signature/authentication when supported;
@@ -249,6 +257,11 @@ Rules:
 - deduplicate before evaluation;
 - return provider-required success quickly;
 - perform slow evaluation asynchronously if needed.
+
+Hosted operator routes use `Authorization: Bearer <INTERNAL_API_TOKEN>`. The existing start route is
+unchanged; `POST /internal/demo/:interactionId/launch` creates the messaging session and queues the
+first validated `ConversationAgent` output. `GET /internal/demo/:interactionId/messaging` exposes
+operational metadata without message content.
 
 ### Evaluation
 
@@ -363,4 +376,3 @@ interface AppErrorPayload {
 ```
 
 Do not expose provider credentials, raw private source data, or model prompts in external error responses.
-

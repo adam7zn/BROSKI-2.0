@@ -7,4 +7,14 @@ export default tseslint.config(
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
+  {
+    rules: {
+      // `const { secret: _secret, ...rest } = row` is how a field gets dropped
+      // from an object; the binding exists only to leave it behind.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { ignoreRestSiblings: true, argsIgnorePattern: '^_' },
+      ],
+    },
+  },
 );

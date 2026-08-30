@@ -7,9 +7,10 @@ first real-message judge demonstration:
 manual start -> profile and delivery metadata -> canonical result -> saved interaction
 ```
 
-The iMessage process remains in `apps/companion`; route and application logic still depend only on
-repository ports. There is no webhook, Canvas integration, scheduler, authentication system,
-generated image, or model-backed agent.
+The hosted Sendblue process runs in this service behind provider and agent ports. Sendblue webhooks
+are authenticated separately, `/internal/*` routes require a bearer token when hosted messaging is
+configured, and PostgreSQL persists session, inbox, and outbox state before asynchronous work.
+There is no Canvas integration, scheduler, generated image, or model-backed agent in this slice.
 
 ## Run with Supabase
 
@@ -29,6 +30,11 @@ When `DATABASE_URL` is present, startup requires a reachable, migrated PostgreSQ
 does not fall back silently. Without `DATABASE_URL`, the API uses memory. Set
 `DEMO_REPOSITORY=memory` to request the disposable in-memory adapter explicitly, including when a
 database URL is present.
+
+When any Sendblue setting is present, startup requires all hosted messaging secrets, PostgreSQL,
+and migration `0009`. Live delivery defaults off. The public routes are `GET /health` and the
+secret-authenticated `POST /webhooks/messaging/sendblue`; every `/internal/*` request must send
+`Authorization: Bearer <INTERNAL_API_TOKEN>`.
 
 The hosted API uses Supabase as PostgreSQL through the existing repository adapter; it does not use
 the Supabase Data API or duplicate contract validation. The explicit hosted scripts accept a
@@ -81,6 +87,12 @@ curl -i http://127.0.0.1:3000/internal/demo/demo-001/events
 The same canonical flow can be run with `pnpm demo:supabase`. Restart
 `pnpm api:start:supabase` afterward and retrieve `/internal/demo/demo-001` to verify that Supabase
 retained the completed interaction.
+
+For the hosted flow, `POST /internal/demo/start?interactionId=<fresh-id>` creates only the existing
+interaction. `POST /internal/demo/<id>/launch` creates the durable messaging session and queues the
+first agent output. `GET /internal/demo/<id>/messaging` returns session/inbox/outbox metadata with
+message bodies removed. The worker reserves every stable key before calling Sendblue and never
+automatically retries an uncertain delivery.
 
 `POST /internal/demo/start` returns the Phase 0 fields plus backward-compatible `mode` and `reason`
 defaults. The trace ID

@@ -92,6 +92,17 @@ export interface Config {
   coursePlanPath: string;
   telegramToken: string;
   telegramChatId: string;
+  sendblue: {
+    apiBaseUrl: string;
+    apiKeyId: string;
+    apiSecretKey: string;
+    fromNumber: string;
+    recipientNumber: string;
+    webhookSecret: string;
+    webhookPort: number;
+    /** Nothing is sent to a real phone until this is deliberately turned on. */
+    liveEnabled: boolean;
+  };
   hasModelKey: boolean;
   replyTimeoutMs: number;
 }
@@ -109,6 +120,17 @@ export function readConfig(): Config {
       resolve(repoRoot, 'data/course-plan.json'),
     telegramToken: process.env['TELEGRAM_BOT_TOKEN'] ?? '',
     telegramChatId: process.env['TELEGRAM_ALLOWED_CHAT_ID'] ?? '',
+    sendblue: {
+      apiBaseUrl:
+        process.env['SENDBLUE_API_BASE_URL'] ?? 'https://api.sendblue.co',
+      apiKeyId: process.env['SENDBLUE_API_KEY_ID'] ?? '',
+      apiSecretKey: process.env['SENDBLUE_API_SECRET_KEY'] ?? '',
+      fromNumber: process.env['SENDBLUE_FROM_NUMBER'] ?? '',
+      recipientNumber: process.env['SENDBLUE_RECIPIENT_NUMBER'] ?? '',
+      webhookSecret: process.env['SENDBLUE_WEBHOOK_SECRET'] ?? '',
+      webhookPort: Number(process.env['SENDBLUE_WEBHOOK_PORT'] ?? 8787),
+      liveEnabled: process.env['MESSAGING_LIVE_ENABLED'] === 'true',
+    },
     hasModelKey: Boolean(process.env['ANTHROPIC_API_KEY']),
     replyTimeoutMs: Number(
       process.env['MSC_REPLY_TIMEOUT_MS'] ?? 30 * 60 * 1000,
