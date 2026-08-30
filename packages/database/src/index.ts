@@ -30,6 +30,13 @@ export {
   type NewHostedOutboundRecord,
 } from './hosted-messaging-repository.js';
 export {
+  PostgresExerciseRepository,
+  exerciseContentChecksum,
+  type ExerciseCatalogRepository,
+  type StoredExercise,
+} from './exercise-repository.js';
+export { importPilotExerciseDrafts } from './import-exercise-drafts.js';
+export {
   clearJudgeDemoFixture,
   type ClearedJudgeDemoFixture,
 } from './judge-demo-maintenance.js';

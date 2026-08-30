@@ -9,7 +9,8 @@ manual start -> profile and delivery metadata -> canonical result -> saved inter
 
 The hosted Sendblue process runs in this service behind provider and agent ports. Sendblue webhooks
 are authenticated separately, every configured runtime requires a bearer token for `/internal/*`,
-and PostgreSQL persists session, inbox, and outbox state before asynchronous work.
+and PostgreSQL persists session, inbox, outbox, and the selected verified-exercise link before
+asynchronous work.
 
 ## Run with Supabase
 
@@ -39,6 +40,11 @@ When any Sendblue setting is present, startup requires all hosted messaging secr
 and migration `0009`. Live delivery defaults off. The public routes are `GET /health` and the
 secret-authenticated `POST /webhooks/messaging/sendblue`; every `/internal/*` request must send
 `Authorization: Bearer <INTERNAL_API_TOKEN>`.
+
+`CONVERSATION_AGENT_PROVIDER` defaults to `deterministic`. Setting it to `anthropic` requires a
+non-empty `ANTHROPIC_API_KEY` and uses `MSC_MODEL` (default `claude-sonnet-5`). Invalid provider
+values or a missing key fail startup. There is no implicit fallback from an explicitly selected
+Anthropic agent.
 
 The hosted API uses Supabase as PostgreSQL through the existing repository adapter; it does not use
 the Supabase Data API or duplicate contract validation. The explicit hosted scripts accept a
@@ -97,6 +103,18 @@ curl -i http://127.0.0.1:3000/internal/demo/demo-001/events \
   -H "authorization: Bearer $INTERNAL_API_TOKEN"
 curl -i 'http://127.0.0.1:3000/internal/messaging/status?verifyProvider=true' \
   -H "authorization: Bearer $INTERNAL_API_TOKEN"
+
+# List only verified exercise metadata; prompts and answers are omitted.
+curl -i http://127.0.0.1:3000/internal/exercises \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
+
+# Create an interaction linked to one explicit verified exercise.
+curl -i -X POST \
+  'http://127.0.0.1:3000/internal/exercises/<exerciseId>/start?interactionId=book-rehearsal-001' \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
+
+curl -i -X POST http://127.0.0.1:3000/internal/demo/book-rehearsal-001/launch \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 ```
 
 The same canonical flow can be run with `pnpm demo:supabase`. Restart
@@ -112,6 +130,13 @@ automatically retries an uncertain delivery.
 The status route never returns credentials, phone numbers, or bodies. With `verifyProvider=true` it
 performs Sendblue's service lookup and succeeds only when the configured destination is reported as
 `iMessage`; it does not send a message.
+
+`GET /internal/exercises` returns metadata for verified rows only. Draft and rejected exercises are
+not launchable. `POST /internal/exercises/:exerciseId/start` stores the exact approved prompt and a
+durable exercise ID; the existing launch route then creates the session and outbox. Claude receives
+only that prompt, its expected answer and rubric, and the bounded conversation transcript. A model
+timeout, rate limit, or schema-invalid response leaves the inbound evidence stored, marks processing
+failed, and queues no invented feedback.
 
 `POST /internal/demo/start` returns the Phase 0 fields plus backward-compatible `mode` and `reason`
 defaults. The trace ID

@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from 'node:crypto';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -93,6 +94,45 @@ describe('PostgresInteractionRepository', () => {
     await expect(
       repository.getByInteractionId(imageContext.interactionId),
     ).resolves.toMatchObject({ image: imageContext.image });
+  });
+
+  it('durably links an interaction to its selected exercise', async () => {
+    const exerciseId = randomUUID();
+    const documentId = randomUUID();
+    const pageId = randomUUID();
+    await pool.query(
+      `INSERT INTO source_documents
+         (id, kind, title, storage_key, checksum, version, license_note, import_status)
+       VALUES ($1, 'textbook', 'Synthetic interaction source', '/tmp/synthetic', $2, 1, 'test', 'reviewed')`,
+      [documentId, createHash('sha256').update(documentId).digest('hex')],
+    );
+    await pool.query(
+      `INSERT INTO source_pages
+         (id, document_id, file_page_number, printed_page_number, page_image_key, extraction_metadata)
+       VALUES ($1, $2, 1, '13', '/tmp/synthetic.jpg', '{}'::jsonb)`,
+      [pageId, documentId],
+    );
+    await pool.query(
+      `INSERT INTO exercises
+         (id, source_page_id, source_bounding_box, section_code, section_title,
+          exercise_number, part_label, topic, prompt, answer_payload, solution_text,
+          rubric, difficulty, grading_strategy, verification_state, content_checksum,
+          verified_by, verified_at)
+       VALUES ($1, $2, '[0.1,0.2,0.7,0.1]'::jsonb, '1.1', 'Synthetic',
+               'S-link', '', 'Synthetic', 'Question',
+               '{"canonical":"4","accepted":[]}'::jsonb, 'Solution', 'Rubric',
+               'easy', 'numeric', 'verified', $3, 'test-reviewer', CURRENT_TIMESTAMP)`,
+      [exerciseId, pageId, 'a'.repeat(64)],
+    );
+
+    await repository.start(
+      { ...context, interactionId: `linked-${randomUUID()}` },
+      { traceId: 'trace-linked', exerciseId },
+    );
+    const linked = await repository.listRecent();
+    expect(
+      linked.some((interaction) => interaction.exerciseId === exerciseId),
+    ).toBe(true);
   });
 
   it('completes all result values atomically and retrieves the interaction', async () => {

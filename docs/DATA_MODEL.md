@@ -156,13 +156,39 @@ Links the student to the course, even though the MVP has one row.
 |---|---|---|
 | `id` | UUID | |
 | `source_page_id` | UUID | |
-| `exercise_number` | text nullable | |
+| `source_block_id` | UUID nullable | Optional extracted-block provenance |
+| `source_bounding_box` | JSONB | Normalized crop coordinates |
+| `section_code` | text | For example `1.1` |
+| `section_title` | text | Human-readable source section |
+| `exercise_number` | text | |
+| `part_label` | text | Empty for an unsplit exercise |
+| `topic` | text | Curated topic label |
 | `prompt` | text | Preserve exact source text |
-| `answer_payload` | JSONB nullable | Structured expected answer |
-| `solution_text` | text nullable | |
-| `difficulty` | text nullable | easy/medium/hard |
+| `answer_payload` | JSONB | Canonical and accepted answers |
+| `solution_text` | text | Locally derived solution |
+| `rubric` | text | Explicit evaluation rule |
+| `difficulty` | text | easy/medium/hard |
 | `grading_strategy` | text | numeric/symbolic/multiple_choice/rubric |
-| `verification_state` | text | |
+| `verification_state` | text | draft/verified/rejected |
+| `content_checksum` | text | Detects conflicting re-imports |
+| `verified_by` | text nullable | Set only for verified rows |
+| `verified_at` | timestamptz nullable | Set only for verified rows |
+
+### `exercise_reviews`
+
+Append-only human evidence. An approval snapshots the exact launchable content; a correction stores
+the corrected snapshot; a rejection prevents launch.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | UUID | |
+| `exercise_id` | UUID | |
+| `decision` | text | approve/correct/reject |
+| `snapshot` | JSONB | Content reviewed at that moment |
+| `content_checksum` | text | Snapshot checksum |
+| `reviewer` | text | Required reviewer identity |
+| `notes` | text nullable | |
+| `created_at` | timestamptz | Immutable evidence time |
 
 ### `exercise_concepts`
 
@@ -241,6 +267,7 @@ Represents one study interaction, which may contain one or several questions/mes
 | `completed_at` | timestamptz nullable |
 | `idempotency_key` | text unique |
 | `agent_run_id` | UUID nullable |
+| `exercise_id` | UUID nullable | Durable link to an explicitly selected verified exercise |
 
 ### `study_items`
 
@@ -421,4 +448,3 @@ attempts
 ```
 
 This protects the project from locking itself into a weak first mastery formula.
-

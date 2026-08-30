@@ -75,7 +75,7 @@ describe('structured local ingestion', () => {
         },
         {
           name: 'contrast',
-          blocks: [block('Kvadreringsregelrn', [0.1, 0.1, 0.6, 0.08])],
+          blocks: [block('Helt annan text', [0.1, 0.1, 0.6, 0.08])],
         },
       ],
     });
@@ -85,6 +85,58 @@ describe('structured local ingestion', () => {
       intersectionOverUnion([0.1, 0.1, 0.4, 0.2], [0.1, 0.1, 0.4, 0.2]),
     ).toBe(1);
     expect(candidateAgreement('ÅÄÖ', 'åäö')).toBe(1);
+  });
+
+  it('normalizes harmless Vision boundary drift before contract validation', () => {
+    const blocks = structurePage({
+      filePageNumber: 1,
+      printedPageNumber: null,
+      imagePath: '/tmp/page.jpg',
+      width: 1000,
+      height: 1500,
+      perspectiveCorrected: true,
+      passes: [
+        {
+          name: 'original',
+          blocks: [block('Boundary text', [-0.00001, 0.99, 1.00002, 0.02])],
+        },
+        {
+          name: 'contrast',
+          blocks: [
+            {
+              ...block('Boundary text', [0, 0.99, 1, 0.01]),
+              confidence: 1.0000001,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(blocks[0]?.boundingBox[0]).toBe(0);
+    expect(blocks[0]?.boundingBox[1]).toBe(0.99);
+    expect(blocks[0]?.boundingBox[2]).toBe(1);
+    expect(blocks[0]?.boundingBox[3]).toBeCloseTo(0.01);
+    expect(blocks[0]?.confidence).toBe(0.95);
+    expect(blocks[0]?.candidates[1]?.confidence).toBe(1);
+  });
+
+  it('rejects material Vision geometry errors instead of hiding them', () => {
+    expect(() =>
+      structurePage({
+        filePageNumber: 1,
+        printedPageNumber: null,
+        imagePath: '/tmp/page.jpg',
+        width: 1000,
+        height: 1500,
+        perspectiveCorrected: true,
+        passes: [
+          {
+            name: 'original',
+            blocks: [block('Outside page', [-0.5, 0.1, 1, 0.1])],
+          },
+        ],
+      }),
+    ).toThrow(/outside page bounds/);
   });
 
   it('detects malformed formula structures', () => {

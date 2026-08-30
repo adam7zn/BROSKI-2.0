@@ -2,13 +2,20 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { afterEach, describe, it } from 'node:test';
 
+import type { VerifiedExerciseContext } from '@math-study-companion/contracts';
+import { ClaudeConversationAgent } from '@math-study-companion/conversation';
+
 import { createDemoApp, type CreateDemoAppOptions } from '../src/app.js';
 import type {
   ConversationResult,
   StoredDemoInteraction,
 } from '../src/domain.js';
 import type { LogEntry, Logger } from '../src/logger.js';
-import { createConfiguredDemoApp } from '../src/persistence.js';
+import { InMemoryExerciseCatalogRepository } from '../src/exercise-repository.js';
+import {
+  buildConversationAgent,
+  createConfiguredDemoApp,
+} from '../src/persistence.js';
 
 const canonicalResult: ConversationResult = {
   interactionId: 'demo-001',
@@ -61,6 +68,71 @@ describe('Phase 1 demo API', () => {
       }),
       /requires hosted Sendblue messaging configuration/,
     );
+  });
+
+  it('selects Anthropic explicitly and never falls back when its key is missing', () => {
+    assert.throws(
+      () =>
+        buildConversationAgent({ CONVERSATION_AGENT_PROVIDER: 'anthropic' }),
+      /ANTHROPIC_API_KEY is required/,
+    );
+    assert.throws(
+      () => buildConversationAgent({ CONVERSATION_AGENT_PROVIDER: 'other' }),
+      /must be deterministic or anthropic/,
+    );
+    assert.ok(
+      buildConversationAgent({
+        CONVERSATION_AGENT_PROVIDER: 'anthropic',
+        ANTHROPIC_API_KEY: 'synthetic-test-key',
+        MSC_MODEL: 'claude-sonnet-5',
+      }) instanceof ClaudeConversationAgent,
+    );
+  });
+
+  it('lists verified metadata and starts an exact manually selected exercise', async () => {
+    const app = await startApp({
+      internalApiToken: 'exercise-test-token',
+      exerciseRepository: new InMemoryExerciseCatalogRepository([
+        verifiedExercise,
+      ]),
+    });
+    const unauthorized = await fetch(`${app.baseUrl}/internal/exercises`);
+    assert.equal(unauthorized.status, 401);
+
+    const headers = { authorization: 'Bearer exercise-test-token' };
+    const list = await fetch(`${app.baseUrl}/internal/exercises`, { headers });
+    assert.equal(list.status, 200);
+    const listed = await list.json();
+    assert.equal(listed.exercises.length, 1);
+    assert.equal(listed.exercises[0].exerciseId, verifiedExercise.exerciseId);
+    assert.equal(
+      JSON.stringify(listed).includes(verifiedExercise.prompt),
+      false,
+    );
+    assert.equal(JSON.stringify(listed).includes('answer-42'), false);
+
+    const started = await fetch(
+      `${app.baseUrl}/internal/exercises/${verifiedExercise.exerciseId}/start?interactionId=verified-run-001`,
+      { method: 'POST', headers },
+    );
+    assert.equal(started.status, 201);
+    const context = await started.json();
+    assert.equal(context.sourceText, verifiedExercise.prompt);
+    assert.equal(context.topic, verifiedExercise.topic);
+
+    const stored = await fetch(
+      `${app.baseUrl}/internal/demo/verified-run-001`,
+      { headers },
+    );
+    assert.equal(stored.status, 200);
+    assert.equal((await stored.json()).exerciseId, verifiedExercise.exerciseId);
+
+    const missing = await fetch(
+      `${app.baseUrl}/internal/exercises/55555555-5555-4555-8555-555555555555/start`,
+      { method: 'POST', headers },
+    );
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, 'VERIFIED_EXERCISE_NOT_FOUND');
   });
 
   it('proves start -> result -> retrieve with one trace ID', async () => {
@@ -384,3 +456,27 @@ function collectingLogger(entries: LogEntry[]): Logger {
     },
   };
 }
+
+const verifiedExercise: VerifiedExerciseContext = {
+  exerciseId: '11111111-1111-4111-8111-111111111111',
+  sourceDocumentId: '22222222-2222-4222-8222-222222222222',
+  sourcePageId: '33333333-3333-4333-8333-333333333333',
+  sourceBlockId: '44444444-4444-4444-8444-444444444444',
+  sourceBoundingBox: [0.1, 0.2, 0.7, 0.1],
+  printedPageNumber: '13',
+  sectionCode: '1.1',
+  sectionTitle: 'Synthetic section',
+  exerciseNumber: 'S-42',
+  partLabel: 'a',
+  topic: 'Synthetic algebra',
+  prompt: 'Synthetic private prompt: compute the test value.',
+  answerPayload: { canonical: 'answer-42', accepted: [] },
+  solutionText: 'Apply the synthetic test operation.',
+  rubric: 'Accept only the synthetic expected value.',
+  difficulty: 'medium',
+  gradingStrategy: 'rubric',
+  contentChecksum: 'a'.repeat(64),
+  verificationState: 'verified',
+  verifiedBy: 'test-reviewer',
+  verifiedAt: '2026-08-30T08:00:00.000Z',
+};

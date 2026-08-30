@@ -22,7 +22,7 @@ import {
   type TranscriptEntry,
 } from './types.js';
 
-export const DEFAULT_MODEL = 'claude-opus-5';
+export const DEFAULT_MODEL = 'claude-sonnet-5';
 
 /**
  * Model output shapes. `docs/RULES.md` §3.1: model output is untrusted until it
@@ -55,6 +55,7 @@ export class ModelOutputError extends Error {
 export interface ClaudeStudyAgentOptions {
   client?: Anthropic;
   model?: string;
+  apiKey?: string;
 }
 
 /** The study agent backed by Claude. */
@@ -67,7 +68,11 @@ export class ClaudeStudyAgent implements StudyAgent {
       options.client ??
       // Credentials come from the environment; never from a repository file
       // (docs/RULES.md §5.7).
-      new Anthropic({ maxRetries: 3, timeout: 60_000 });
+      new Anthropic({
+        ...(options.apiKey ? { apiKey: options.apiKey } : {}),
+        maxRetries: 3,
+        timeout: 60_000,
+      });
     this.#model = options.model ?? process.env['MSC_MODEL'] ?? DEFAULT_MODEL;
   }
 
@@ -158,6 +163,19 @@ export class ClaudeStudyAgent implements StudyAgent {
     const parsed = response.parsed_output;
     if (parsed === null || parsed === undefined) {
       throw new ModelOutputError('respond');
+    }
+
+    if (hintsSpent && parsed.intent === 'hint') {
+      throw new ModelOutputError(
+        'respond',
+        new Error('The model attempted to exceed the two-hint limit.'),
+      );
+    }
+    if (!input.canContinue && parsed.intent !== 'feedback') {
+      throw new ModelOutputError(
+        'respond',
+        new Error('The model did not resolve the final allowed turn.'),
+      );
     }
 
     let { intent, result, confidence } = parsed;

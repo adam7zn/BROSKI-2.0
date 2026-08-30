@@ -4,8 +4,10 @@ import {
   type BackendToConversation,
   type ConversationAgentOutput,
   type DemoProfileInput,
+  type VerifiedExerciseContext,
 } from '@math-study-companion/contracts';
 
+import { checkAnswer } from './agent/answer-check.js';
 import { checkCanonicalAnswer } from './answer-check.js';
 import { CANONICAL_FEEDBACK, CANONICAL_QUESTION } from './canonical-session.js';
 
@@ -18,6 +20,7 @@ export interface ConversationHistoryItem {
 export interface AgentSessionStartInput {
   context: BackendToConversation;
   profile?: DemoProfileInput | null;
+  exercise?: VerifiedExerciseContext | null;
   traceId: string;
 }
 
@@ -29,6 +32,7 @@ export interface AgentInboundTurnInput {
   history: ConversationHistoryItem[];
   agentState: unknown;
   traceId: string;
+  exercise?: VerifiedExerciseContext | null;
 }
 
 export interface ConversationAgent {
@@ -59,7 +63,7 @@ export class DeterministicDemoAgent implements ConversationAgent {
   ): Promise<ConversationAgentOutput> {
     if (input.profile) {
       return output({
-        outbound: [textIntent('question', CANONICAL_QUESTION)],
+        outbound: [textIntent('question', questionText(input.exercise))],
         agentState: { step: 'answer' },
         profile: null,
         result: null,
@@ -130,7 +134,7 @@ export class DeterministicDemoAgent implements ConversationAgent {
       return output({
         outbound: [
           textIntent('onboarding-confirmation', CONFIRMATION),
-          textIntent('question', CANONICAL_QUESTION),
+          textIntent('question', questionText(input.exercise)),
         ],
         agentState: { step: 'answer' },
         profile,
@@ -140,9 +144,12 @@ export class DeterministicDemoAgent implements ConversationAgent {
     }
 
     if (state.step === 'answer') {
-      const verdict = checkCanonicalAnswer(reply);
-      const feedback =
-        verdict === 'correct'
+      const verdict = input.exercise
+        ? checkVerifiedExerciseAnswer(input.exercise, reply)
+        : checkCanonicalAnswer(reply);
+      const feedback = input.exercise
+        ? verifiedExerciseFeedback(input.exercise, verdict)
+        : verdict === 'correct'
           ? CANONICAL_FEEDBACK
           : verdict === 'incorrect'
             ? 'Not quite — subtract 3 first, then divide both sides by 2.'
@@ -153,7 +160,7 @@ export class DeterministicDemoAgent implements ConversationAgent {
         profile: null,
         result: {
           interactionId: input.interactionId,
-          question: CANONICAL_QUESTION,
+          question: questionText(input.exercise),
           studentReply: reply,
           feedback,
           result: verdict,
@@ -170,6 +177,39 @@ export class DeterministicDemoAgent implements ConversationAgent {
       status: 'completed',
     });
   }
+}
+
+function questionText(exercise?: VerifiedExerciseContext | null): string {
+  return exercise?.prompt ?? CANONICAL_QUESTION;
+}
+
+function checkVerifiedExerciseAnswer(
+  exercise: VerifiedExerciseContext,
+  reply: string,
+): 'correct' | 'incorrect' | 'unclear' {
+  const accepted = [
+    exercise.answerPayload.canonical,
+    ...exercise.answerPayload.accepted,
+  ];
+  if (accepted.some((answer) => checkAnswer(answer, reply) === 'match')) {
+    return 'correct';
+  }
+  return checkAnswer(exercise.answerPayload.canonical, reply) === 'mismatch'
+    ? 'incorrect'
+    : 'unclear';
+}
+
+function verifiedExerciseFeedback(
+  exercise: VerifiedExerciseContext,
+  verdict: 'correct' | 'incorrect' | 'unclear',
+): string {
+  if (verdict === 'correct') {
+    return 'Correct — that matches the verified answer.';
+  }
+  if (verdict === 'incorrect') {
+    return `Not quite. ${exercise.solutionText}`;
+  }
+  return "I couldn't verify that reply deterministically, so I've marked it unclear.";
 }
 
 function textIntent(purpose: string, text: string) {

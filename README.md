@@ -132,9 +132,11 @@ only PostgreSQL is authoritative. See ADR-014.
 
 ## Current milestone
 
-The Platform Phase 1 loop is persisted in PostgreSQL. The active judge MVP connects that same
-canonical interaction to one hosted Sendblue iMessage conversation while retaining the local
-iMessage and Telegram runners:
+The Platform Phase 1 loop is persisted in PostgreSQL, and the Phase 3 Sendblue slice connects that
+same interaction to one hosted iMessage conversation. Phase 4 is now implemented behind manual and
+human-review gates: a reviewer approves a private textbook exercise, an operator selects it by ID,
+and the existing durable messaging loop can use Claude for hints and feedback without allowing the
+model to rewrite the question.
 
 ```text
 backend context
@@ -166,6 +168,7 @@ The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
 | Extract Chapter 1 with Apple Vision | `swift scripts/structured-ocr.swift --input chapter-1 --output chapter-1/extracted/checkpoints` |
 | Assemble structured extraction JSON | `pnpm extract:chapter -- --checkpoints chapter-1/extracted/checkpoints --output chapter-1/extracted/chapter-1-structured.json --pix2tex` |
 | Import structured Chapter 1 content | `pnpm --filter @math-study-companion/database db:import-structured-chapter -- chapter-1/extracted/chapter-1-structured.json` |
+| Import the private 20-exercise draft manifest | `pnpm --filter @math-study-companion/database db:import-exercise-drafts -- data/private-exercise-drafts.json` |
 | Start local review API | `ADMIN_TOKEN=<local-token> pnpm review-api:dev` |
 | Start local review UI | `pnpm admin:dev` |
 | Apply migrations to Supabase | `pnpm db:migrate:supabase` |
@@ -190,6 +193,32 @@ it with `pnpm api:start:supabase`, and then run `pnpm demo:supabase`. Restart th
 
 For isolated checks, run `pnpm db:up`, `pnpm db:migrate`, and `pnpm check`, then stop the disposable
 service with `pnpm db:down`. CI follows this local path and never connects to Supabase.
+
+## Verified textbook exercise pilot
+
+Migration `0011_create_verified_exercises.sql` adds the private exercise catalog, append-only review
+evidence, and the durable interaction-to-exercise link. The private pilot manifest is intentionally
+ignored by Git. Importing it creates only `draft` rows. In the local review UI, William must compare
+the original page crop with the direct question, expected answer, solution, and rubric, then approve,
+correct, or reject each item. Only a reviewed `verified` row appears in the launch catalog.
+
+The authenticated manual flow is:
+
+```text
+GET  /internal/exercises
+POST /internal/exercises/:exerciseId/start?interactionId=<fresh-id>
+POST /internal/demo/:interactionId/launch
+```
+
+The start route preserves the approved prompt exactly. Set
+`CONVERSATION_AGENT_PROVIDER=anthropic`, `MSC_MODEL=claude-sonnet-5`, and the secret
+`ANTHROPIC_API_KEY` to use Claude. An explicit Anthropic selection fails startup if the key is
+missing and never falls back silently. On each model turn Claude receives only the selected prompt,
+expected answer, rubric, and relevant transcript—not the page image, surrounding page, or book.
+
+Keep both `CONVERSATION_AGENT_PROVIDER=deterministic` and `MESSAGING_LIVE_ENABLED=false` for the
+first deployment. Hosted migration, hosted draft import, Anthropic activation, and any real send
+remain separate approval gates.
 
 ## Judge iMessage demo
 

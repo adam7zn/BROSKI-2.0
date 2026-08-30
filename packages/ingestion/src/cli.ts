@@ -93,7 +93,7 @@ try {
     }
     extractedPages.push({
       filePageNumber: page.filePageNumber,
-      printedPageNumber: page.printedPageNumber,
+      printedPageNumber: page.printedPageNumber ?? null,
       imagePath: path.resolve(page.imagePath),
       width: page.width,
       height: page.height,

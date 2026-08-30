@@ -4,7 +4,10 @@ import type {
   DemoMessageEventInput,
   DemoOutboundReservationInput,
   DemoProfileInput,
+  VerifiedExerciseContext,
+  VerifiedExerciseSummary,
 } from '@math-study-companion/contracts';
+import type { ExerciseCatalogRepository } from '@math-study-companion/database';
 
 import type { DemoContracts, RuntimeSchema } from './contracts.js';
 import { validateWithSchema } from './contracts.js';
@@ -19,6 +22,7 @@ import type { DemoInteractionRepository } from './repository.js';
 
 export interface DemoServiceOptions {
   repository: DemoInteractionRepository;
+  exerciseRepository: ExerciseCatalogRepository;
   contracts: DemoContracts;
   contextFixture: BackendContext;
   now?: () => Date;
@@ -26,12 +30,14 @@ export interface DemoServiceOptions {
 
 export class DemoService {
   readonly #repository: DemoInteractionRepository;
+  readonly #exerciseRepository: ExerciseCatalogRepository;
   readonly #contracts: DemoContracts;
   readonly #contextFixture: BackendContext;
   readonly #now: () => Date;
 
   constructor(options: DemoServiceOptions) {
     this.#repository = options.repository;
+    this.#exerciseRepository = options.exerciseRepository;
     this.#contracts = options.contracts;
     this.#contextFixture = structuredClone(options.contextFixture);
     this.#now = options.now ?? (() => new Date());
@@ -41,9 +47,65 @@ export class DemoService {
     traceId: string,
     interactionId = this.#contextFixture.interactionId,
   ): Promise<StoredDemoInteraction> {
+    return this.#startContext(
+      { ...this.#contextFixture, interactionId },
+      traceId,
+      null,
+    );
+  }
+
+  async startExercise(
+    exerciseId: string,
+    traceId: string,
+    interactionId = `exercise-${randomUUID()}`,
+  ): Promise<StoredDemoInteraction> {
+    const exercise = await this.#exerciseRepository.getVerified(exerciseId);
+    if (!exercise) {
+      throw new AppError(404, {
+        code: 'VERIFIED_EXERCISE_NOT_FOUND',
+        message: 'The requested verified exercise was not found',
+        retryable: false,
+        traceId,
+        details: { exerciseId },
+      });
+    }
+    return this.#startContext(
+      {
+        interactionId,
+        topic: exercise.topic,
+        sourceText: exercise.prompt,
+        difficulty: exercise.difficulty,
+        image: null,
+        mode: 'PRACTISE',
+        reason: `Manual verified textbook exercise ${exercise.exerciseNumber}${exercise.partLabel}, page ${exercise.printedPageNumber}`,
+      },
+      traceId,
+      exercise.exerciseId,
+    );
+  }
+
+  async listVerifiedExercises(): Promise<VerifiedExerciseSummary[]> {
+    return this.#exerciseRepository.listVerified();
+  }
+
+  async findVerifiedExerciseForInteraction(
+    interactionId: string,
+    traceId: string,
+  ): Promise<VerifiedExerciseContext | null> {
+    const interaction = await this.get(interactionId, traceId);
+    return interaction.exerciseId
+      ? this.#exerciseRepository.getVerified(interaction.exerciseId)
+      : null;
+  }
+
+  async #startContext(
+    candidateContext: BackendContext,
+    traceId: string,
+    exerciseId: string | null,
+  ): Promise<StoredDemoInteraction> {
     const contextValidation = validateWithSchema(
       this.#contracts.backendContext,
-      { ...this.#contextFixture, interactionId },
+      candidateContext,
     );
     if (!contextValidation.success) {
       throw new AppError(500, {
@@ -57,6 +119,7 @@ export class DemoService {
 
     const record: StoredDemoInteraction = {
       interactionId: contextValidation.data.interactionId,
+      exerciseId,
       traceId,
       context: contextValidation.data,
       result: null,

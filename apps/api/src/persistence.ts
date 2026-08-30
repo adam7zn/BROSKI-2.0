@@ -1,10 +1,13 @@
 import {
+  ClaudeConversationAgent,
+  ClaudeStudyAgent,
   DeterministicDemoAgent,
   SendblueMessagingProvider,
   type ConversationAgent,
 } from '@math-study-companion/conversation';
 import {
   PostgresHostedMessagingRepository,
+  PostgresExerciseRepository,
   PostgresInteractionRepository,
 } from '@math-study-companion/database';
 import { Pool } from 'pg';
@@ -18,10 +21,13 @@ import { InMemoryDemoInteractionRepository } from './repository.js';
 export type DemoPersistence = 'memory' | 'postgresql';
 
 export interface PersistenceEnvironment {
+  ANTHROPIC_API_KEY?: string;
+  CONVERSATION_AGENT_PROVIDER?: string;
   DATABASE_URL?: string;
   DEMO_REPOSITORY?: string;
   INTERNAL_API_TOKEN?: string;
   MESSAGING_LIVE_ENABLED?: string;
+  MSC_MODEL?: string;
   SENDBLUE_API_BASE_URL?: string;
   SENDBLUE_API_KEY_ID?: string;
   SENDBLUE_API_SECRET_KEY?: string;
@@ -45,9 +51,11 @@ export async function createConfiguredDemoApp(
   const {
     environment = process.env,
     logger = jsonLogger,
-    conversationAgent = new DeterministicDemoAgent(),
+    conversationAgent: injectedConversationAgent,
     ...appOptions
   } = options;
+  const conversationAgent =
+    injectedConversationAgent ?? buildConversationAgent(environment);
   const persistence = selectPersistence(environment);
   const internalApiToken = requiredEnvironmentValue(
     environment,
@@ -100,7 +108,10 @@ export async function createConfiguredDemoApp(
   });
 
   try {
-    await pool.query('SELECT mode, reason FROM interactions LIMIT 0');
+    await pool.query(
+      'SELECT mode, reason, exercise_id FROM interactions LIMIT 0',
+    );
+    await pool.query('SELECT id FROM exercises LIMIT 0');
     await pool.query('SELECT profile_id FROM demo_profiles LIMIT 0');
     const messagingConfiguration = hostedMessagingConfiguration(
       environment,
@@ -120,10 +131,12 @@ export async function createConfiguredDemoApp(
     const repository = new PostgresDemoInteractionRepositoryAdapter(
       new PostgresInteractionRepository(pool),
     );
+    const exerciseRepository = new PostgresExerciseRepository(pool);
     const app = await createDemoApp({
       ...appOptions,
       logger,
       repository,
+      exerciseRepository,
       ...(messagingConfiguration
         ? { internalApiToken: messagingConfiguration.internalApiToken }
         : { internalApiToken }),
@@ -165,6 +178,28 @@ export async function createConfiguredDemoApp(
     await pool.end();
     throw error;
   }
+}
+
+export function buildConversationAgent(
+  environment: PersistenceEnvironment,
+): ConversationAgent {
+  const provider =
+    environment.CONVERSATION_AGENT_PROVIDER?.trim() || 'deterministic';
+  if (provider === 'deterministic') return new DeterministicDemoAgent();
+  if (provider !== 'anthropic') {
+    throw new Error(
+      'CONVERSATION_AGENT_PROVIDER must be deterministic or anthropic',
+    );
+  }
+  const apiKey = requiredEnvironmentValue(
+    environment,
+    'ANTHROPIC_API_KEY',
+    'Anthropic conversation agent',
+  );
+  const model = environment.MSC_MODEL?.trim() || 'claude-sonnet-5';
+  return new ClaudeConversationAgent({
+    studyAgent: new ClaudeStudyAgent({ apiKey, model }),
+  });
 }
 
 function selectPersistence(

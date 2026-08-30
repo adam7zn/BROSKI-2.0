@@ -2,6 +2,8 @@ import type {
   BoundingBox,
   BlockType,
   DocumentSummary,
+  Exercise,
+  ExerciseContent,
   PageDetail,
   PageSummary,
 } from './types.js';
@@ -35,6 +37,33 @@ export const api = {
     ),
   page: (token: string, pageId: string) =>
     request<PageDetail>(token, `/internal/content/pages/${pageId}`),
+  exercises: (token: string, pageId: string) =>
+    request<Exercise[]>(token, `/internal/content/pages/${pageId}/exercises`),
+  createExercise: (token: string, pageId: string, value: ExerciseContent) =>
+    request<Exercise>(token, `/internal/content/pages/${pageId}/exercises`, {
+      method: 'POST',
+      body: JSON.stringify(value),
+    }),
+  reviewExercise: (
+    token: string,
+    exerciseId: string,
+    value: {
+      decision: 'approve' | 'correct' | 'reject';
+      correction: ExerciseContent | null;
+    },
+  ) =>
+    request<Exercise>(
+      token,
+      `/internal/content/exercises/${exerciseId}/reviews`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          ...value,
+          reviewer: 'william',
+          notes: null,
+        }),
+      },
+    ),
   image: async (token: string, url: string): Promise<string> => {
     const response = await fetch(url, {
       headers: { authorization: `Bearer ${token}` },

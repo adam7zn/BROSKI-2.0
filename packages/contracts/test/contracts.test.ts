@@ -9,6 +9,8 @@ import {
   demoMessageEventInputSchema,
   demoOutboundReservationInputSchema,
   demoProfileInputSchema,
+  exerciseReviewInputSchema,
+  pilotExerciseDraftManifestSchema,
   type BackendToConversation,
   type ConversationToBackend,
 } from '@math-study-companion/contracts';
@@ -171,3 +173,76 @@ describe('conversationToBackendSchema', () => {
     expect(conversationToBackendSchema.safeParse(value).success).toBe(false);
   });
 });
+
+describe('verified exercise contracts', () => {
+  it('requires correction content only for a correction review', () => {
+    expect(
+      exerciseReviewInputSchema.safeParse({ decision: 'approve' }).success,
+    ).toBe(true);
+    expect(
+      exerciseReviewInputSchema.safeParse({ decision: 'correct' }).success,
+    ).toBe(false);
+    expect(
+      exerciseReviewInputSchema.safeParse({
+        decision: 'reject',
+        correction: exerciseItem(0),
+      }).success,
+    ).toBe(false);
+  });
+
+  it('accepts only the exact 20-question pilot distribution', () => {
+    const exercises = Array.from({ length: 20 }, (_, index) =>
+      exerciseItem(index),
+    );
+    const manifest = {
+      schemaVersion: 1,
+      sourceDocumentChecksum: 'a'.repeat(64),
+      exercises,
+    };
+    expect(
+      pilotExerciseDraftManifestSchema.parse(manifest).exercises,
+    ).toHaveLength(20);
+    expect(
+      pilotExerciseDraftManifestSchema.safeParse({
+        ...manifest,
+        exercises: exercises.map((exercise) => ({
+          ...exercise,
+          sectionCode: '1.1',
+        })),
+      }).success,
+    ).toBe(false);
+    expect(
+      pilotExerciseDraftManifestSchema.safeParse({
+        ...manifest,
+        exercises: exercises.map((exercise) => ({
+          ...exercise,
+          difficulty: 'easy',
+        })),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+function exerciseItem(index: number) {
+  return {
+    printedPageNumber: String(8 + index),
+    sourceBlockSequenceNumber: index + 1,
+    sourceBoundingBox: [0.1, 0.1, 0.8, 0.1] as const,
+    sectionCode: index < 6 ? '1.1' : index < 13 ? '1.2' : '1.3',
+    sectionTitle:
+      index < 6
+        ? 'Polynom'
+        : index < 13
+          ? 'Polynomekvationer'
+          : 'Rationella uttryck',
+    exerciseNumber: `synthetic-${index + 1}`,
+    partLabel: 'a',
+    topic: 'Synthetic algebra',
+    prompt: `Synthetic question ${index + 1}`,
+    answerPayload: { canonical: String(index + 1), accepted: [] },
+    solutionText: `Synthetic solution ${index + 1}`,
+    rubric: 'Compare the final value.',
+    difficulty: index < 10 ? 'easy' : index < 16 ? 'medium' : 'hard',
+    gradingStrategy: 'numeric' as const,
+  };
+}

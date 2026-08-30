@@ -267,6 +267,26 @@ operational metadata without message content.
 `availability` is `null` unless `verifyProvider=true`; with that flag the adapter performs a
 read-only `/api/evaluate-service` lookup and fails closed unless Sendblue reports `iMessage`.
 
+The Phase 4 manual verified-exercise routes use the same bearer boundary:
+
+```text
+GET  /internal/exercises
+POST /internal/exercises/:exerciseId/start?interactionId=<fresh-id>
+POST /internal/demo/:interactionId/launch
+```
+
+The list returns provenance and difficulty metadata for `verified` rows only; it omits prompts,
+answers, solutions, and rubrics. The start route rejects missing, draft, and rejected IDs, stores an
+immutable interaction-to-exercise reference, and uses the approved prompt byte-for-byte as the
+interaction source text. The existing canonical `/internal/demo/start` remains backward-compatible.
+
+`CONVERSATION_AGENT_PROVIDER=deterministic|anthropic` selects the hosted behavior and defaults to
+`deterministic`. Anthropic mode requires `ANTHROPIC_API_KEY`, uses `MSC_MODEL` (default
+`claude-sonnet-5`), and has no silent deterministic fallback. Claude receives only the selected
+prompt, expected answer, rubric, and bounded transcript. It does not receive the page image,
+surrounding textbook page, or complete book. A timeout, rate limit, or schema-invalid response
+preserves the claimed inbound evidence, fails the turn, and creates no feedback outbox row.
+
 The smarter agent adapter must implement this exact in-process boundary:
 
 ```ts

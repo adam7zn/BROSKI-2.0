@@ -1,6 +1,7 @@
 import path from 'node:path';
 
 import {
+  PostgresExerciseRepository,
   PostgresSourceContentRepository,
   runMigrations,
 } from '@math-study-companion/database';
@@ -20,6 +21,7 @@ const pool = new Pool({
 await runMigrations(pool);
 const server = createContentReviewApp({
   repository: new PostgresSourceContentRepository(pool),
+  exercises: new PostgresExerciseRepository(pool),
   adminToken: token,
   imageRoot: process.env.CHAPTER_IMAGE_ROOT ?? path.resolve('chapter-1'),
 });

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { api } from './api';
+import { ExerciseEditor } from './ExerciseEditor';
 import type {
   Block,
   BlockType,
@@ -438,7 +439,7 @@ export function App() {
           </div>
         </section>
         <aside className="review-panel">
-          {selected ? (
+          {selected && page ? (
             <>
               <div className="review-heading">
                 <div>
@@ -577,6 +578,11 @@ export function App() {
               >
                 <Trash2 size={14} /> Delete block
               </button>
+              <ExerciseEditor
+                token={token}
+                page={page}
+                selectedBlock={selected}
+              />
               <div className="shortcuts">
                 <span>N</span> next unresolved <span>A</span> approve{' '}
                 <span>← →</span> pages

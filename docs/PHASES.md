@@ -147,8 +147,8 @@ Use fake/local messaging for this phase. A real messaging provider is not requir
 William receives one question on a real device, replies once, receives feedback, and the backend stores the full interaction exactly once.
 
 Infrastructure acceptance uses `DeterministicDemoAgent` for the canonical `Solve 2x + 3 = 11.`
-flow. The richer `StudyAgent` remains available for the product path and can later be adapted through
-`ConversationAgent`; neither agent may call Sendblue or PostgreSQL directly.
+flow. The richer `StudyAgent` is adapted through `ConversationAgent` in Phase 4; neither agent may
+call Sendblue or PostgreSQL directly.
 
 No schedules, Canvas synchronization, learning model, dashboard, or multi-user support.
 
@@ -172,6 +172,21 @@ Only start this phase after the real-message loop is stable.
 ### Done when
 
 Ten manually started interactions use real material and can be reviewed from source context through saved result.
+
+### Current implementation status
+
+- migration `0011` adds private exercise drafts, append-only approve/correct/reject reviews, and a
+  durable interaction link without changing the independent Canvas migration `0010`;
+- the local review UI displays the page crop, exact prompt, expected answer, solution, and rubric;
+- a private 20-item pilot manifest is validated at 6/7/7 items across sections 1.1/1.2/1.3 and
+  10/6/4 easy/medium/hard, but imported rows remain drafts until William reviews them;
+- authenticated routes list verified metadata and start one explicitly selected exercise;
+- the Anthropic adapter keeps onboarding deterministic, sends the approved prompt unchanged, and
+  fails closed on provider or model-output errors.
+
+Phase 4 is not complete until at least ten real-material interactions have passed the full review,
+messaging, feedback, and durable-result loop. Hosted migration/import, Anthropic activation, and
+live messaging remain separate approval gates.
 
 ## Phase 5 — Add timing carefully
 

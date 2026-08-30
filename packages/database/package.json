@@ -12,6 +12,7 @@
     "db:migrate": "tsx src/migrate.ts",
     "db:migration-status": "tsx src/migration-status.ts",
     "db:import-chapter": "tsx src/import-chapter.ts",
+    "db:import-exercise-drafts": "tsx src/import-exercise-drafts.ts",
     "db:import-structured-chapter": "tsx src/import-structured-chapter.ts",
     "test": "vitest run --config vitest.config.ts",
     "test:local": "docker compose up -d --wait && pnpm db:migrate && vitest run --config vitest.config.ts"

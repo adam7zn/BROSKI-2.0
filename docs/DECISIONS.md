@@ -191,7 +191,7 @@ A wrong or annoying proactive message is more damaging than a poor answer to a u
 
 ## ADR-009 — Minimal TypeScript workspace toolchain
 
-**Status:** ACCEPTED  
+**Status:** ACCEPTED
 **Date:** 2026-08-28
 
 ### Decision
@@ -467,6 +467,57 @@ provider calls, delivery uncertainty, and persistence from leaking into agent co
 
 The pilot needs multiple recipients, horizontal worker concurrency beyond one Render instance,
 provider failover, a supported Sendblue idempotency API, or a separately deployed agent process.
+
+---
+
+## ADR-017 — Human-verified exercise catalog with explicit Claude activation
+
+**Status:** ACCEPTED
+**Date:** 2026-08-30
+
+### Context
+
+The fixed Phase 3 equation proves delivery and durability but is not sufficient evidence that the
+companion uses the real textbook. Raw OCR is private and mathematically unverified, while allowing a
+model to choose or rewrite source material would blur provenance and correctness.
+
+### Decision
+
+Store a small catalog of private textbook exercises as drafts linked to page/block provenance.
+Human approve/correct/reject reviews are append-only, and only verified rows can be selected through
+an authenticated manual route. Store the selected exercise ID on the interaction and deliver its
+approved prompt unchanged.
+
+Adapt `ClaudeStudyAgent` behind the deployed `ConversationAgent` only for reply interpretation,
+bounded hints, and concise feedback. Keep onboarding deterministic. Hosted agent selection is
+explicit through `CONVERSATION_AGENT_PROVIDER`; choosing `anthropic` requires a key and never falls
+back silently. Use `claude-sonnet-5` as the new default model override. This supersedes ADR-013's
+default model and fallback wording for the hosted conversation path; local standalone runners may
+retain their explicit offline mode.
+
+### Reason
+
+The catalog makes every question traceable to an inspected source and expected answer. Manual
+selection proves the useful real-material loop before Canvas planning is allowed to choose an item.
+The explicit provider gate keeps infrastructure tests deterministic and prevents a missing or failed
+model from silently changing learning behavior.
+
+### Consequences
+
+- page images, verbatim manifests, and real answers remain private and outside Git;
+- import creates drafts only, and hosted migration/import require separate review and approval;
+- the public messaging worker receives a validated verified-exercise context through its existing
+  agent boundary and keeps all provider calls outside the agent;
+- Claude sees only the selected prompt, answer/rubric, and bounded transcript;
+- timeout, rate-limit, or invalid structured output preserves inbound evidence and queues no
+  invented feedback;
+- Canvas selection, adaptive scheduling, and a broader deterministic algebra checker remain future
+  phases.
+
+### Revisit when
+
+The ten-interaction Phase 4 acceptance loop is measured, Canvas is ready to select exercises, or a
+model/privacy review requires a different provider or model.
 
 ---
 

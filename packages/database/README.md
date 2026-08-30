@@ -1,9 +1,10 @@
 # Phase 1 database package
 
-This package stores the two Phase 0 payloads plus the narrow Phase 3 hosted-messaging state needed
-for the Sendblue demonstration. PostgreSQL owns the interaction, profile, normalized delivery
-events, outbound reservations, messaging session, minimized inbox, and outbox. It still has no
-Canvas, learning-memory, scheduler, or mastery tables.
+This package stores the two Phase 0 payloads, the narrow Phase 3 hosted-messaging state, and the
+Phase 4 manually verified exercise catalog. PostgreSQL owns the interaction, profile, normalized
+delivery events, outbound reservations, messaging session, minimized inbox, outbox, exercise
+review evidence, and interaction-to-exercise provenance. It still has no learning-memory,
+scheduler, or mastery tables.
 
 ## Local PostgreSQL and migrations
 
@@ -35,6 +36,25 @@ Imported pages retain their source image path, OCR confidence, and review
 metadata. The importer leaves `verified_at` unset; OCR text must not be treated
 as exact textbook content until a reviewer has checked the mathematical
 notation and reading order.
+
+After importing structured source content, import the private pilot manifest as drafts:
+
+```sh
+DATABASE_URL=postgresql://postgres@127.0.0.1:54329/math_study_companion \
+  pnpm --filter @math-study-companion/database db:import-exercise-drafts -- \
+  data/private-exercise-drafts.json
+```
+
+The manifest schema enforces exactly 20 independent items: sections 1.1/1.2/1.3 contain 6/7/7,
+and difficulty contains 10 easy, 6 medium, and 4 hard items. Re-importing identical drafts is
+idempotent; conflicting content fails. Imports never mark an exercise verified. Approval,
+correction, or rejection is recorded by the authenticated local review service, and review rows are
+append-only. Page images and `data/private-*.json` stay out of Git.
+
+The draft importer accepts only a loopback database and cannot be overridden for hosted use. After
+all 20 local reviews are complete, publish only the human-verified snapshots through a separately
+reviewed hosted operation, after the exact migration ledger and target have been reported and
+William has approved both the migration and publication.
 
 Use `db:down` to stop the container. The named volume remains so migration
 history and data survive restarts.

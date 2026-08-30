@@ -7,6 +7,10 @@ export {
   type ConversationHistoryItem,
 } from './agent.js';
 export {
+  ClaudeConversationAgent,
+  type ClaudeConversationAgentOptions,
+} from './claude-conversation-agent.js';
+export {
   CANONICAL_FEEDBACK,
   CANONICAL_QUESTION,
   runCanonicalInteraction,

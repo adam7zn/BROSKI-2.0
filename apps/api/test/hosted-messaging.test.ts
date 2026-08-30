@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { afterEach, test } from 'node:test';
 
+import type { VerifiedExerciseContext } from '@math-study-companion/contracts';
 import {
+  ClaudeConversationAgent,
   DeterministicDemoAgent,
   SendblueError,
   type ConversationAgent,
@@ -13,6 +15,7 @@ import {
 } from '@math-study-companion/conversation';
 
 import { createDemoApp } from '../src/app.js';
+import { InMemoryExerciseCatalogRepository } from '../src/exercise-repository.js';
 import { stableIdempotencyKey } from '../src/hosted-messaging.js';
 import type { Logger } from '../src/logger.js';
 import { InMemoryHostedMessagingRepository } from '../src/messaging-repository.js';
@@ -59,6 +62,41 @@ test('runs launch -> Sendblue webhook replies -> agent -> persisted result', asy
   assert.equal(JSON.stringify(inspected).includes(participant), false);
   assert.equal(JSON.stringify(inspected).includes(line), false);
   assert.equal(inspected.session?.status, 'completed');
+});
+
+test('launches the manually selected verified prompt unchanged through the durable outbox', async () => {
+  const exercise = syntheticVerifiedExercise();
+  const fixture = await createFixture({
+    interactionId: 'verified-exercise-run',
+    exercise,
+    agent: new ClaudeConversationAgent({
+      studyAgent: {
+        askQuestion: async () => {
+          throw new Error('Claude must not invent the selected question.');
+        },
+        respond: async () => {
+          throw new Error('No inbound turn is expected in this test.');
+        },
+      },
+    }),
+  });
+  await fixture.app.service.saveProfile(
+    {
+      course: 'Mathematics 3c',
+      selfAssessedLevel: 'okay',
+      previousGrade: null,
+    },
+    'trace-1',
+  );
+
+  await fixture.launch();
+
+  assert.equal(fixture.provider.sent[0]?.text, exercise.prompt);
+  assert.equal(
+    (await fixture.app.service.get('verified-exercise-run', 'request'))
+      .exerciseId,
+    exercise.exerciseId,
+  );
 });
 
 test('deduplicates inbound handles and filters wrong, group, and old events', async () => {
@@ -514,6 +552,7 @@ test('derives stable keys from session position rather than agent wording', () =
 
 interface FixtureOptions {
   interactionId?: string;
+  exercise?: VerifiedExerciseContext;
   provider?: CapturingProvider;
   agent?: ConversationAgent;
   autoLaunch?: boolean;
@@ -528,9 +567,13 @@ async function createFixture(options: FixtureOptions = {}) {
   const repository = new InMemoryHostedMessagingRepository(
     interactionRepository,
   );
+  const exerciseRepository = new InMemoryExerciseCatalogRepository(
+    options.exercise ? [options.exercise] : [],
+  );
   const provider = options.provider ?? new CapturingProvider(now);
   const app = await createDemoApp({
     repository: interactionRepository,
+    exerciseRepository,
     contextFixture: {
       interactionId,
       topic: 'linear equations',
@@ -555,7 +598,15 @@ async function createFixture(options: FixtureOptions = {}) {
       ...(options.logger ? { logger: options.logger } : {}),
     },
   });
-  await app.service.start('trace-1', interactionId);
+  if (options.exercise) {
+    await app.service.startExercise(
+      options.exercise.exerciseId,
+      'trace-1',
+      interactionId,
+    );
+  } else {
+    await app.service.start('trace-1', interactionId);
+  }
 
   const fixture = {
     app,
@@ -583,6 +634,32 @@ async function createFixture(options: FixtureOptions = {}) {
   };
   if (options.autoLaunch === true) await fixture.launch();
   return fixture;
+}
+
+function syntheticVerifiedExercise(): VerifiedExerciseContext {
+  return {
+    exerciseId: '11111111-1111-4111-8111-111111111111',
+    sourceDocumentId: '22222222-2222-4222-8222-222222222222',
+    sourcePageId: '33333333-3333-4333-8333-333333333333',
+    sourceBlockId: '44444444-4444-4444-8444-444444444444',
+    sourceBoundingBox: [0.1, 0.2, 0.7, 0.1],
+    printedPageNumber: '13',
+    sectionCode: '1.1',
+    sectionTitle: 'Synthetic Polynomials',
+    exerciseNumber: 'S-101',
+    partLabel: 'a',
+    topic: 'Synthetic factorisation',
+    prompt: 'Factor x^2 - 9.',
+    answerPayload: { canonical: '(x-3)(x+3)', accepted: [] },
+    solutionText: 'Use the difference of two squares.',
+    rubric: 'Accept an algebraically equivalent complete factorisation.',
+    difficulty: 'medium',
+    gradingStrategy: 'symbolic',
+    contentChecksum: 'a'.repeat(64),
+    verificationState: 'verified',
+    verifiedBy: 'test-reviewer',
+    verifiedAt: '2026-08-30T08:00:00.000Z',
+  };
 }
 
 class CapturingProvider implements MessagingProvider {

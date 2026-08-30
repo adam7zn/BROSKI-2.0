@@ -520,6 +520,140 @@ header h1 {
 .shortcuts span:first-child {
   margin-left: 0;
 }
+.exercise-editor {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #d8d1c7;
+}
+.exercise-editor-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.exercise-editor-heading strong {
+  font-size: 11px;
+}
+.exercise-editor-heading button,
+.exercise-save,
+.exercise-review-actions button {
+  min-height: 31px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid #cbc4b9;
+  border-radius: 6px;
+  background: #fffefb;
+  color: #4f4942;
+  font-size: 10px;
+  font-weight: 700;
+}
+.exercise-editor-heading button:disabled,
+.exercise-save:disabled,
+.exercise-review-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.exercise-list {
+  display: flex;
+  gap: 5px;
+  overflow-x: auto;
+  margin: 9px 0;
+  padding-bottom: 3px;
+}
+.exercise-list button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d5cec3;
+  border-radius: 99px;
+  padding: 5px 8px;
+  background: white;
+  color: #4c473f;
+  font-size: 9px;
+  white-space: nowrap;
+}
+.exercise-list button.active {
+  border-color: #397666;
+  box-shadow: 0 0 0 2px #39766618;
+}
+.exercise-list small {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.exercise-list small.verified {
+  color: #397666;
+}
+.exercise-list small.rejected,
+.exercise-error {
+  color: #944b45;
+}
+.exercise-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #d8d1c7;
+  border-radius: 8px;
+  background: #f2eee7;
+}
+.exercise-form label {
+  display: grid;
+  gap: 4px;
+  color: #777066;
+  font-size: 9px;
+  font-weight: 700;
+}
+.exercise-form input,
+.exercise-form select,
+.exercise-form textarea {
+  width: 100%;
+  border: 1px solid #c9c2b7;
+  border-radius: 6px;
+  padding: 7px;
+  background: #fffefb;
+  color: #302d28;
+  font-size: 10px;
+}
+.exercise-form textarea {
+  min-height: 66px;
+  resize: vertical;
+  font-family: ui-monospace, monospace;
+}
+.exercise-grid {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr 0.6fr 1fr;
+  gap: 6px;
+}
+.exercise-save {
+  background: #24463e;
+  border-color: #24463e;
+  color: white;
+}
+.exercise-review-actions {
+  display: grid;
+  grid-template-columns: 0.8fr 1.2fr 1fr;
+  gap: 5px;
+}
+.exercise-review-actions .correct {
+  background: #d27843;
+  border-color: #d27843;
+  color: white;
+}
+.exercise-review-actions .approve {
+  background: #397666;
+  border-color: #397666;
+  color: white;
+}
+.exercise-warning,
+.exercise-error {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.4;
+}
+.exercise-warning {
+  color: #817b70;
+}
 .empty {
   height: 100%;
   display: grid;

@@ -123,11 +123,18 @@ export class HostedMessagingService {
         traceId: interaction.traceId,
       });
     }
-    const profile = await this.options.service.findProfile();
+    const [profile, exercise] = await Promise.all([
+      this.options.service.findProfile(),
+      this.options.service.findVerifiedExerciseForInteraction(
+        interactionId,
+        interaction.traceId,
+      ),
+    ]);
     const output = validateAgentOutput(
       await this.options.agent.startSession({
         context: interaction.context,
         profile,
+        exercise,
         traceId: interaction.traceId,
       }),
       interaction.traceId,
@@ -450,10 +457,14 @@ export class HostedMessageWorker {
 
   async #processInbound(message: InboundMessage): Promise<void> {
     try {
-      const [session, interaction, history] = await Promise.all([
+      const [session, interaction, history, exercise] = await Promise.all([
         this.options.repository.findSession(message.interactionId),
         this.options.service.get(message.interactionId, message.traceId),
         this.options.repository.history(message.interactionId),
+        this.options.service.findVerifiedExerciseForInteraction(
+          message.interactionId,
+          message.traceId,
+        ),
       ]);
       if (!session || session.status !== 'active') {
         await this.options.repository.discardInbound({
@@ -480,6 +491,7 @@ export class HostedMessageWorker {
           history,
           agentState: session.agentState,
           traceId: session.traceId,
+          exercise,
         }),
         session.traceId,
         message.interactionId,

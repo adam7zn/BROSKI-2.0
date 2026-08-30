@@ -6,7 +6,10 @@ import {
   type ServerResponse,
 } from 'node:http';
 
-import { demoInteractionIdSchema } from '@math-study-companion/contracts';
+import {
+  demoInteractionIdSchema,
+  exerciseIdSchema,
+} from '@math-study-companion/contracts';
 
 import { AppError, type AppErrorPayload } from './errors.js';
 import type { Logger } from './logger.js';
@@ -121,6 +124,66 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           method,
           path,
           200,
+        );
+        return;
+      }
+
+      if (method === 'GET' && path === '/internal/exercises') {
+        const exercises = await options.service.listVerifiedExercises();
+        respond(response, 200, { exercises }, requestTraceId);
+        log(
+          logger,
+          'info',
+          'exercise.catalog_listed',
+          requestTraceId,
+          method,
+          path,
+          200,
+        );
+        return;
+      }
+
+      const exerciseStartMatch = path.match(
+        /^\/internal\/exercises\/([^/]+)\/start$/,
+      );
+      if (method === 'POST' && exerciseStartMatch?.[1]) {
+        const exerciseId = decodeURIComponent(exerciseStartMatch[1]);
+        if (!exerciseIdSchema.safeParse(exerciseId).success) {
+          throw new AppError(400, {
+            code: 'INVALID_EXERCISE_ID',
+            message: 'The requested exercise ID is invalid',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        const requestedInteractionId = url.searchParams.get('interactionId');
+        if (
+          requestedInteractionId !== null &&
+          !demoInteractionIdSchema.safeParse(requestedInteractionId).success
+        ) {
+          throw new AppError(400, {
+            code: 'INVALID_INTERACTION_ID',
+            message: 'The requested interaction ID is invalid',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        const interaction = await options.service.startExercise(
+          exerciseId,
+          requestTraceId,
+          requestedInteractionId ?? undefined,
+        );
+        interactionId = interaction.interactionId;
+        respond(response, 201, interaction.context, interaction.traceId);
+        log(
+          logger,
+          'info',
+          'exercise.interaction_started',
+          interaction.traceId,
+          method,
+          path,
+          201,
+          interactionId,
         );
         return;
       }

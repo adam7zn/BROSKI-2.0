@@ -29,6 +29,7 @@ export class PostgresDemoInteractionRepositoryAdapter implements DemoInteraction
     try {
       await this.database.start(interaction.context, {
         traceId: interaction.traceId,
+        exerciseId: interaction.exerciseId,
       });
       return 'created';
     } catch (error) {
@@ -126,6 +127,7 @@ function toDemoInteraction(
 ): StoredDemoInteraction {
   return {
     interactionId: interaction.interactionId,
+    exerciseId: interaction.exerciseId,
     traceId: interaction.traceId,
     context: {
       interactionId: interaction.interactionId,

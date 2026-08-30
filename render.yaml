@@ -14,6 +14,10 @@ services:
         value: 0.0.0.0
       - key: DEMO_REPOSITORY
         value: postgresql
+      - key: CONVERSATION_AGENT_PROVIDER
+        value: deterministic
+      - key: MSC_MODEL
+        value: claude-sonnet-5
       - key: SENDBLUE_API_BASE_URL
         value: https://api.sendblue.co
       - key: MESSAGING_LIVE_ENABLED
@@ -31,4 +35,6 @@ services:
       - key: SENDBLUE_WEBHOOK_SECRET
         sync: false
       - key: INTERNAL_API_TOKEN
+        sync: false
+      - key: ANTHROPIC_API_KEY
         sync: false

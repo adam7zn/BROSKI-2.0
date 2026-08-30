@@ -65,6 +65,13 @@ The MVP processes private educational information and a potentially copyrighted 
 
 - Send only the minimum relevant source chunks and student context needed for the task.
 - Do not send the entire textbook or full message history in every request.
+- For a verified-exercise turn, send only the exact selected prompt, structured expected answer,
+  rubric, and relevant bounded transcript. Do not send the page image, surrounding page, private
+  manifest, solution corpus, or full book.
+- Keep the exercise prompt deterministic and human-approved; the model may interpret the reply and
+  write hints or feedback but must not rewrite or invent the delivered question.
+- Treat timeouts, rate limits, and schema-invalid model responses as failed turns. Preserve inbound
+  evidence and send no fabricated fallback feedback.
 - Review provider data-retention and training settings before using real private data.
 - Store provider request IDs for audit without logging complete sensitive payloads unnecessarily.
 - Never include secrets in model prompts.

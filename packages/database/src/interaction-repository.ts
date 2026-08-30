@@ -15,6 +15,7 @@ import {
 
 export interface StartInteractionOptions {
   traceId: string;
+  exerciseId?: string | null;
 }
 
 export interface CompleteInteractionOptions {
@@ -23,6 +24,7 @@ export interface CompleteInteractionOptions {
 
 export interface StoredInteraction {
   interactionId: string;
+  exerciseId: string | null;
   topic: string;
   sourceText: string;
   difficulty: string;
@@ -86,6 +88,7 @@ export interface InteractionRepository {
 
 interface InteractionRow extends QueryResultRow {
   interaction_id: string;
+  exercise_id: string | null;
   topic: string;
   source_text: string;
   difficulty: string;
@@ -126,6 +129,7 @@ interface DemoMessageEventRow extends QueryResultRow {
 
 const columns = `
   interaction_id,
+  exercise_id,
   topic,
   source_text,
   difficulty,
@@ -143,6 +147,7 @@ const columns = `
 
 const toStoredInteraction = (row: InteractionRow): StoredInteraction => ({
   interactionId: row.interaction_id,
+  exerciseId: row.exercise_id,
   topic: row.topic,
   sourceText: row.source_text,
   difficulty: row.difficulty,
@@ -189,6 +194,7 @@ export class PostgresInteractionRepository implements InteractionRepository {
       const inserted = await this.pool.query<InteractionRow>(
         `INSERT INTO interactions (
           interaction_id,
+          exercise_id,
           topic,
           source_text,
           difficulty,
@@ -196,10 +202,11 @@ export class PostgresInteractionRepository implements InteractionRepository {
           mode,
           reason,
           trace_id
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING ${columns}`,
         [
           context.interactionId,
+          options.exerciseId ?? null,
           context.topic,
           context.sourceText,
           context.difficulty,

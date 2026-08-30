@@ -29,6 +29,38 @@ export interface RawVisionPage {
   passes: RawVisionPass[];
 }
 
+const clamp = (value: number, minimum: number, maximum: number): number =>
+  Math.min(maximum, Math.max(minimum, value));
+
+const normalizeRawBlock = (block: RawVisionBlock): RawVisionBlock => {
+  const [rawX, rawY, rawWidth, rawHeight] = block.boundingBox;
+  const rawRight = rawX + rawWidth;
+  const rawBottom = rawY + rawHeight;
+  const boundaryTolerance = 0.02;
+  if (
+    ![rawX, rawY, rawWidth, rawHeight, block.confidence].every(
+      Number.isFinite,
+    ) ||
+    rawWidth <= 0 ||
+    rawHeight <= 0 ||
+    rawX < -boundaryTolerance ||
+    rawY < -boundaryTolerance ||
+    rawRight > 1 + boundaryTolerance ||
+    rawBottom > 1 + boundaryTolerance
+  ) {
+    throw new Error('Vision returned a malformed block outside page bounds.');
+  }
+  const x = clamp(rawX, 0, 1 - Number.EPSILON);
+  const y = clamp(rawY, 0, 1 - Number.EPSILON);
+  const right = clamp(rawRight, x + Number.EPSILON, 1);
+  const bottom = clamp(rawBottom, y + Number.EPSILON, 1);
+  return {
+    ...block,
+    boundingBox: [x, y, right - x, bottom - y],
+    confidence: clamp(block.confidence, 0, 1),
+  };
+};
+
 const mathPattern =
   /[=≈≠≤≥±√∫∑∞^_]|\b(?:lim|sin|cos|tan|log)\b|\d\s*[+−*/]\s*\d/iu;
 const exercisePattern = /^(?:\d+[.:]\d+|övning|uppgift|nivå)\b/iu;
@@ -240,10 +272,10 @@ export const structurePage = (page: RawVisionPage): ExtractedSourceBlock[] => {
   if (originalPass === undefined)
     throw new Error(`Page ${page.filePageNumber} has no original pass.`);
   const originals = groupTextBlocks(
-    removeLayoutDuplicates(originalPass.blocks),
+    removeLayoutDuplicates(originalPass.blocks.map(normalizeRawBlock)),
   );
   const contrasts = groupTextBlocks(
-    removeLayoutDuplicates(contrastPass?.blocks ?? []),
+    removeLayoutDuplicates((contrastPass?.blocks ?? []).map(normalizeRawBlock)),
   );
   const unusedContrast = new Set(contrasts.map((_, index) => index));
 

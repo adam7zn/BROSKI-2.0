@@ -10,6 +10,7 @@ export type ConversationResult = ConversationToBackend;
 
 export interface StoredDemoInteraction {
   interactionId: string;
+  exerciseId: string | null;
   traceId: string;
   context: BackendContext;
   result: ConversationResult | null;

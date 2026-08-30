@@ -54,3 +54,36 @@ export interface DocumentSummary {
   resolvedBlockCount: number;
   totalBlockCount: number;
 }
+
+export type ExerciseDifficulty = 'easy' | 'medium' | 'hard';
+export type ExerciseGradingStrategy =
+  'numeric' | 'symbolic' | 'multiple_choice' | 'rubric';
+
+export interface ExerciseContent {
+  sourcePageId: string;
+  sourceBlockId: string | null;
+  sourceBoundingBox: BoundingBox;
+  sectionCode: string;
+  sectionTitle: string;
+  exerciseNumber: string;
+  partLabel: string;
+  topic: string;
+  prompt: string;
+  answerPayload: { canonical: string; accepted: string[] };
+  solutionText: string;
+  rubric: string;
+  difficulty: ExerciseDifficulty;
+  gradingStrategy: ExerciseGradingStrategy;
+}
+
+export interface Exercise extends ExerciseContent {
+  exerciseId: string;
+  sourceDocumentId: string;
+  printedPageNumber: string;
+  verificationState: 'draft' | 'verified' | 'rejected';
+  contentChecksum: string;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

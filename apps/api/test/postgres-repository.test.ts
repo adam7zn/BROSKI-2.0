@@ -16,6 +16,7 @@ import { PostgresDemoInteractionRepositoryAdapter } from '../src/postgres-reposi
 const completedAt = new Date('2026-08-28T12:34:56.000Z');
 const flatInteraction: StoredInteraction = {
   interactionId: 'demo-001',
+  exerciseId: null,
   topic: 'linear equations',
   sourceText: 'Solve equations by applying the same operation to both sides.',
   difficulty: 'easy',
@@ -32,6 +33,7 @@ const flatInteraction: StoredInteraction = {
 };
 const nestedInteraction: StoredDemoInteraction = {
   interactionId: 'demo-001',
+  exerciseId: null,
   traceId: 'trace-001',
   context: {
     interactionId: 'demo-001',

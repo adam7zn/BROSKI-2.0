@@ -10,14 +10,20 @@ import path from 'node:path';
 import {
   blockLayoutInputSchema,
   blockReviewInputSchema,
+  exerciseDraftInputSchema,
+  exerciseReviewInputSchema,
   sourceBoundingBoxSchema,
   sourceBlockTypeSchema,
 } from '@math-study-companion/contracts';
-import { PostgresSourceContentRepository } from '@math-study-companion/database';
+import {
+  PostgresExerciseRepository,
+  PostgresSourceContentRepository,
+} from '@math-study-companion/database';
 import sharp from 'sharp';
 
 export interface ReviewAppOptions {
   repository: PostgresSourceContentRepository;
+  exercises: PostgresExerciseRepository;
   adminToken: string;
   imageRoot: string;
 }
@@ -163,6 +169,62 @@ export const createContentReviewApp = (options: ReviewAppOptions): Server =>
           safeImagePath(options.imageRoot, reference.imagePath),
           reference.block.boundingBox,
         );
+        return;
+      }
+      const pageExercises = url.pathname.match(
+        /^\/internal\/content\/pages\/([^/]+)\/exercises$/u,
+      );
+      if (request.method === 'GET' && pageExercises !== null) {
+        json(
+          response,
+          200,
+          await options.exercises.listPage(pageExercises[1]!),
+        );
+        return;
+      }
+      if (request.method === 'POST' && pageExercises !== null) {
+        const draft = exerciseDraftInputSchema.parse(await readJson(request));
+        if (draft.sourcePageId !== pageExercises[1]) {
+          throw new Error('Exercise sourcePageId must match the route page.');
+        }
+        json(response, 201, await options.exercises.createDraft(draft));
+        return;
+      }
+      const exerciseCrop = url.pathname.match(
+        /^\/internal\/content\/exercises\/([^/]+)\/crop$/u,
+      );
+      if (request.method === 'GET' && exerciseCrop !== null) {
+        const reference = await options.exercises.getImageReference(
+          exerciseCrop[1]!,
+        );
+        await sendImage(
+          response,
+          safeImagePath(options.imageRoot, reference.imagePath),
+          reference.boundingBox,
+        );
+        return;
+      }
+      const exerciseReviews = url.pathname.match(
+        /^\/internal\/content\/exercises\/([^/]+)\/reviews$/u,
+      );
+      if (request.method === 'POST' && exerciseReviews !== null) {
+        json(
+          response,
+          201,
+          await options.exercises.review(
+            exerciseReviews[1]!,
+            exerciseReviewInputSchema.parse(await readJson(request)),
+          ),
+        );
+        return;
+      }
+      const exercise = url.pathname.match(
+        /^\/internal\/content\/exercises\/([^/]+)$/u,
+      );
+      if (request.method === 'GET' && exercise !== null) {
+        const found = await options.exercises.get(exercise[1]!);
+        if (!found) throw new Error(`Exercise ${exercise[1]} was not found.`);
+        json(response, 200, found);
         return;
       }
       const layout = url.pathname.match(
