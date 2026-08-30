@@ -99,6 +99,7 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
           });
         }
         const verifyProviderValue = url.searchParams.get('verifyProvider');
+        const verifyAgentValue = url.searchParams.get('verifyAgent');
         if (
           verifyProviderValue !== null &&
           verifyProviderValue !== 'true' &&
@@ -111,9 +112,22 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
             traceId: requestTraceId,
           });
         }
+        if (
+          verifyAgentValue !== null &&
+          verifyAgentValue !== 'true' &&
+          verifyAgentValue !== 'false'
+        ) {
+          throw new AppError(400, {
+            code: 'INVALID_AGENT_VERIFICATION_FLAG',
+            message: 'verifyAgent must be true or false',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
         const status = await options.messaging.status(
           verifyProviderValue === 'true',
           requestTraceId,
+          verifyAgentValue === 'true',
         );
         respond(response, 200, status, requestTraceId);
         log(

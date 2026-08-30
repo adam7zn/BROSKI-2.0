@@ -67,20 +67,12 @@ export class HostedMessagingService {
     this.#claimTimeoutMs = options.claimTimeoutMs ?? defaultClaimTimeoutMs;
   }
 
-  async status(verifyProvider: boolean, traceId: string) {
-    if (!verifyProvider) {
-      return {
-        provider: providerName,
-        liveEnabled: this.options.liveEnabled,
-        availability: null,
-      };
-    }
+  async status(verifyProvider: boolean, traceId: string, verifyAgent = false) {
+    let availability: SendblueServiceAvailability | null = null;
     try {
-      return {
-        provider: providerName,
-        liveEnabled: this.options.liveEnabled,
-        availability: await this.options.provider.checkServiceAvailability(),
-      };
+      if (verifyProvider) {
+        availability = await this.options.provider.checkServiceAvailability();
+      }
     } catch (error) {
       const kind = error instanceof SendblueError ? error.kind : 'unexpected';
       throw new AppError(503, {
@@ -92,6 +84,35 @@ export class HostedMessagingService {
         traceId,
       });
     }
+    let agentAvailability: { provider: string; model: string | null } | null =
+      null;
+    if (verifyAgent) {
+      if (!this.options.agent.verifyProvider) {
+        throw new AppError(503, {
+          code: 'AGENT_PROVIDER_PREFLIGHT_UNAVAILABLE',
+          message:
+            'The configured conversation agent has no provider preflight',
+          retryable: false,
+          traceId,
+        });
+      }
+      try {
+        agentAvailability = await this.options.agent.verifyProvider();
+      } catch (error) {
+        throw new AppError(503, {
+          code: classifyAgentFailure(error),
+          message: safeProviderDiagnostic(error),
+          retryable: false,
+          traceId,
+        });
+      }
+    }
+    return {
+      provider: providerName,
+      liveEnabled: this.options.liveEnabled,
+      availability,
+      agentAvailability,
+    };
   }
 
   authenticateWebhook(
@@ -691,6 +712,28 @@ function classifyAgentFailure(error: unknown): string {
     if (candidate.name === 'ModelOutputError') return 'AGENT_OUTPUT_INVALID';
   }
   return 'AGENT_PROCESSING_FAILED';
+}
+
+function safeProviderDiagnostic(error: unknown): string {
+  const fallback = 'The configured agent provider rejected the preflight';
+  if (typeof error !== 'object' || error === null) return fallback;
+  const candidate = error as { message?: unknown; error?: unknown };
+  const body =
+    typeof candidate.error === 'object' && candidate.error !== null
+      ? (candidate.error as Record<string, unknown>)
+      : null;
+  const nested =
+    typeof body?.['error'] === 'object' && body['error'] !== null
+      ? (body['error'] as Record<string, unknown>)
+      : null;
+  const raw = [nested?.['message'], body?.['message'], candidate.message].find(
+    (value): value is string => typeof value === 'string' && value.length > 0,
+  );
+  if (!raw) return fallback;
+  return raw
+    .replace(/sk-ant-[A-Za-z0-9_-]+/g, '[REDACTED]')
+    .replace(/\+[1-9]\d{7,14}/g, '[REDACTED]')
+    .slice(0, 240);
 }
 
 function isCompletedAgentState(value: unknown): boolean {

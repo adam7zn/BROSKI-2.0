@@ -263,9 +263,13 @@ unchanged; `POST /internal/demo/:interactionId/launch` creates the messaging ses
 first validated `ConversationAgent` output. `GET /internal/demo/:interactionId/messaging` exposes
 operational metadata without message content.
 
-`GET /internal/messaging/status` returns only `{ provider, liveEnabled, availability }`.
+`GET /internal/messaging/status` returns provider, live-enabled state, and optional availability
+checks.
 `availability` is `null` unless `verifyProvider=true`; with that flag the adapter performs a
 read-only `/api/evaluate-service` lookup and fails closed unless Sendblue reports `iMessage`.
+Operators can add `verifyAgent=true` to run a synthetic, no-message Anthropic preflight. It uses no
+textbook or student content and returns only provider/model readiness or a redacted provider
+validation error. The endpoint never queues an iMessage.
 
 The Phase 4 manual verified-exercise routes use the same bearer boundary:
 

@@ -38,6 +38,13 @@ export class ClaudeConversationAgent implements ConversationAgent {
     this.#studyAgent = options.studyAgent ?? new ClaudeStudyAgent();
   }
 
+  verifyProvider(): Promise<{ provider: string; model: string | null }> {
+    if (!this.#studyAgent.verifyProvider) {
+      throw new Error('The selected study agent cannot verify its provider');
+    }
+    return this.#studyAgent.verifyProvider();
+  }
+
   startSession(
     input: AgentSessionStartInput,
   ): Promise<ConversationAgentOutput> {

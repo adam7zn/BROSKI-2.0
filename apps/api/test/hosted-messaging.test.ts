@@ -305,13 +305,19 @@ test('requires bearer auth for internal routes and separate webhook auth', async
   const messagingRepository = new InMemoryHostedMessagingRepository(
     interactionRepository,
   );
+  const preflightAgent = Object.assign(new DeterministicDemoAgent(), {
+    verifyProvider: async () => ({
+      provider: 'anthropic',
+      model: 'claude-sonnet-5',
+    }),
+  });
   const app = await createDemoApp({
     repository: interactionRepository,
     internalApiToken: 'internal-test-token',
     messaging: {
       repository: messagingRepository,
       provider: new CapturingProvider(() => new Date()),
-      agent: new DeterministicDemoAgent(),
+      agent: preflightAgent,
       webhookSecret,
       participantAddress: participant,
       providerLine: line,
@@ -351,6 +357,23 @@ test('requires bearer auth for internal routes and separate webhook auth', async
   assert.equal(messagingStatusBody.liveEnabled, false);
   assert.equal(messagingStatusBody.availability.service, 'iMessage');
   assert.ok(Date.parse(messagingStatusBody.availability.checkedAt));
+  const agentStatus = await fetch(
+    `${baseUrl}/internal/messaging/status?verifyAgent=true`,
+    { headers: { authorization: 'Bearer internal-test-token' } },
+  );
+  assert.equal(agentStatus.status, 200);
+  assert.deepEqual((await agentStatus.json()).agentAvailability, {
+    provider: 'anthropic',
+    model: 'claude-sonnet-5',
+  });
+  assert.equal(
+    (
+      await fetch(`${baseUrl}/internal/messaging/status?verifyAgent=maybe`, {
+        headers: { authorization: 'Bearer internal-test-token' },
+      })
+    ).status,
+    400,
+  );
   const invalidWebhook = await fetch(`${baseUrl}/webhooks/messaging/sendblue`, {
     method: 'POST',
     headers: {

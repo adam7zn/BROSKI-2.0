@@ -88,6 +88,7 @@ export interface StudyAgent {
   askQuestion(context: BackendContext): Promise<GeneratedQuestion>;
   respond(input: RespondInput): Promise<AgentTurn>;
   followUp?(input: FollowUpInput): Promise<FollowUpTurn>;
+  verifyProvider?(): Promise<{ provider: string; model: string | null }>;
 }
 
 /**

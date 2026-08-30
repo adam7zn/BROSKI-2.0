@@ -290,6 +290,19 @@ export class ClaudeStudyAgent implements StudyAgent {
       },
     };
   }
+
+  async verifyProvider(): Promise<{ provider: string; model: string }> {
+    const response = await this.#client.messages.create({
+      model: this.#model,
+      max_tokens: 16,
+      messages: [{ role: 'user', content: 'Reply with only OK.' }],
+    });
+    const hasText = response.content.some(
+      (block) => block.type === 'text' && block.text.trim().length > 0,
+    );
+    if (!hasText) throw new ModelOutputError('followUp');
+    return { provider: 'anthropic', model: this.#model };
+  }
 }
 
 function parseFollowUpResponse(

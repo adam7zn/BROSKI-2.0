@@ -38,6 +38,7 @@ export interface AgentInboundTurnInput {
 export interface ConversationAgent {
   startSession(input: AgentSessionStartInput): Promise<ConversationAgentOutput>;
   handleInbound(input: AgentInboundTurnInput): Promise<ConversationAgentOutput>;
+  verifyProvider?(): Promise<{ provider: string; model: string | null }>;
 }
 
 type DemoStep = 'course' | 'level' | 'grade' | 'answer' | 'complete';
