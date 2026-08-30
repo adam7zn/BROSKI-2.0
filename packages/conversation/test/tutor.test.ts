@@ -26,17 +26,33 @@ const pages = [
 
 type ContentBlock = { type: string; text?: string };
 
+interface TutorOutput {
+  covered: boolean;
+  exercise: string | null;
+  message: string;
+  steps: string[];
+  question: string | null;
+  usedPages: string[];
+}
+
 function stubClient(
-  output: { covered: boolean; answer: string; usedPages: string[] },
+  output: Partial<TutorOutput> & { covered: boolean; message: string },
   onContent?: (content: ContentBlock[]) => void,
 ) {
+  const parsed: TutorOutput = {
+    exercise: null,
+    steps: [],
+    question: null,
+    usedPages: [],
+    ...output,
+  };
   return {
     messages: {
       parse: async (params: {
         messages: Array<{ content: ContentBlock[] }>;
       }) => {
         onContent?.(params.messages[0]?.content ?? []);
-        return { parsed_output: output };
+        return { parsed_output: parsed };
       },
     },
   } as unknown as Anthropic;
@@ -106,7 +122,7 @@ test('only the pages retrieval found are put in front of the model', async () =>
     client: stubClient(
       {
         covered: true,
-        answer: 'Börja med att halvera p.',
+        message: 'Börja med att halvera p.',
         usedPages: ['s. 84'],
       },
       (content) => prompts.push(textOf(content)),
@@ -124,7 +140,7 @@ test('a page the model claims but never saw is dropped', async () => {
     pages,
     client: stubClient({
       covered: true,
-      answer: 'Se sidan om derivator.',
+      message: 'Se sidan om derivator.',
       // Neither page was offered for this question.
       usedPages: ['s. 20', 's. 300'],
     }),
@@ -141,7 +157,7 @@ test('a question outside the book is not answered from general knowledge', async
     client: stubClient({
       // Even if the model claims coverage, nothing was retrieved to cover it.
       covered: true,
-      answer: 'En integral är arean under kurvan.',
+      message: 'En integral är arean under kurvan.',
       usedPages: ['s. 84'],
     }),
   });
@@ -154,7 +170,7 @@ test('with no book at all it says so instead of guessing', async () => {
   const turn = await runTutorTurn({
     question: 'hur löser jag x^2 = 9?',
     pages: [],
-    client: stubClient({ covered: true, answer: 'x = 3', usedPages: [] }),
+    client: stubClient({ covered: true, message: 'x = 3', usedPages: [] }),
   });
 
   assert.equal(turn.covered, false);
@@ -171,7 +187,7 @@ test('a follow-up finds the page the conversation is about', async () => {
     ],
     pages,
     client: stubClient(
-      { covered: true, answer: 'Kvadrera det.', usedPages: ['s. 84'] },
+      { covered: true, message: 'Kvadrera det.', usedPages: ['s. 84'] },
       (content) => prompts.push(textOf(content)),
     ),
   });
@@ -196,7 +212,7 @@ test('a page just photographed is used even when the words match nothing', async
     client: stubClient(
       {
         covered: true,
-        answer: 'Börja med att multiplicera in x i parentesen.',
+        message: 'Börja med att multiplicera in x i parentesen.',
         usedPages: ['Uppgifter 1117–1129'],
       },
       (content) => prompts.push(textOf(content)),
@@ -217,7 +233,7 @@ test('a photographed page works even with no book indexed at all', async () => {
     pinned: [{ id: 'upload:x', label: 'Uppgift 12', text: 'Lös 2x + 3 = 11.' }],
     client: stubClient({
       covered: true,
-      answer: 'Ta bort trean från båda sidor först.',
+      message: 'Ta bort trean från båda sidor först.',
       usedPages: ['Uppgift 12'],
     }),
   });
@@ -239,7 +255,7 @@ test('the photo itself is put in front of the model, not only its text', async (
       },
     ],
     client: stubClient(
-      { covered: true, answer: '1117 a: multiplicera in x.', usedPages: [] },
+      { covered: true, message: '1117 a: multiplicera in x.', usedPages: [] },
       (content) => blocks.push(...content),
     ),
   });
@@ -262,7 +278,7 @@ test('a photo alone is enough to answer, with no book indexed', async () => {
     ],
     client: stubClient({
       covered: true,
-      answer: 'Börja med att flytta över trean.',
+      message: 'Börja med att flytta över trean.',
       usedPages: [],
     }),
   });
@@ -285,7 +301,7 @@ test('the book is searched with the words on the page just photographed', async 
       },
     ],
     client: stubClient(
-      { covered: true, answer: 'Halvera p först.', usedPages: ['s. 84'] },
+      { covered: true, message: 'Halvera p först.', usedPages: ['s. 84'] },
       (content) => prompts.push(textOf(content)),
     ),
   });
@@ -308,10 +324,70 @@ test('an unrelated page is still left out when the photo finds pages', async () 
       },
     ],
     client: stubClient(
-      { covered: true, answer: 'Halvera p.', usedPages: ['s. 84'] },
+      { covered: true, message: 'Halvera p.', usedPages: ['s. 84'] },
       (content) => prompts.push(textOf(content)),
     ),
   });
 
   assert.ok(!prompts[0]!.includes('s. 20'));
+});
+
+test('the reply is laid out in parts, not as a wall of text', async () => {
+  const turn = await runTutorTurn({
+    question: 'lös första frågan',
+    pages,
+    pinned: [{ id: 'upload:abc', label: 'Uppgift 1117', text: 'x(x - 3)' }],
+    client: stubClient({
+      covered: true,
+      exercise: '1117 a) x(x - 3)',
+      message: 'Här multiplicerar du in x i parentesen.',
+      steps: ['Ta x gånger varje term:\nx · x - x · 3', 'Förenkla varje term.'],
+      question: 'Vad blir de två termerna?',
+      usedPages: [],
+    }),
+  });
+
+  assert.equal(
+    turn.answer,
+    [
+      '1117 a) x(x - 3)',
+      '',
+      'Här multiplicerar du in x i parentesen.',
+      '',
+      '1. Ta x gånger varje term:',
+      'x · x - x · 3',
+      '2. Förenkla varje term.',
+      '',
+      'Vad blir de två termerna?',
+    ].join('\n'),
+  );
+});
+
+test('a reply with nothing to lay out is just the one line', async () => {
+  const turn = await runTutorTurn({
+    question: 'hej',
+    pages,
+    client: stubClient({
+      covered: false,
+      message: 'Hej! Vad har du fastnat på?',
+    }),
+  });
+
+  assert.equal(turn.answer, 'Hej! Vad har du fastnat på?');
+});
+
+test('blank parts do not leave holes in the reply', async () => {
+  const turn = await runTutorTurn({
+    question: 'lös den',
+    pages,
+    client: stubClient({
+      covered: true,
+      exercise: '   ',
+      message: 'Halvera p först.',
+      steps: ['', '  ', 'Kvadrera hälften av p.'],
+      question: '  ',
+    }),
+  });
+
+  assert.equal(turn.answer, 'Halvera p först.\n\n1. Kvadrera hälften av p.');
 });

@@ -369,3 +369,38 @@ test('a test can ask for the backlog when it wants it', async () => {
 
   assert.deepEqual(seen, ['gammalt']);
 });
+
+test('a second companion on the same token is said out loud, not swallowed', async () => {
+  const { impl } = stubFetch([
+    {
+      ok: false,
+      error_code: 409,
+      description:
+        'Conflict: terminated by other getUpdates request; make sure that only one bot instance is running',
+      httpStatus: 409,
+    },
+  ]);
+  const warnings: string[] = [];
+  const telegram = new TelegramMessagingProvider({
+    token: TOKEN,
+    allowedConversationIds: ['555'],
+    fetchImpl: impl,
+    pollTimeoutSeconds: 0,
+    onPollError: (message) => warnings.push(message),
+  });
+
+  const controller = new AbortController();
+  setTimeout(() => controller.abort(), 60);
+  const delivered: unknown[] = [];
+  for await (const event of telegram.listen({ signal: controller.signal })) {
+    delivered.push(event);
+  }
+  assert.equal(delivered.length, 0);
+
+  // Two processes both answer, and the student gets two replies to one
+  // question. A silent retry is how that goes unnoticed.
+  assert.ok(
+    warnings.some((line) => line.includes('Another process')),
+    `expected a conflict warning, got ${JSON.stringify(warnings)}`,
+  );
+});

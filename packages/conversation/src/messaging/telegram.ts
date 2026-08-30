@@ -47,6 +47,13 @@ export interface TelegramOptions {
   deliverBacklog?: boolean;
   /** Overridable so a test can decide what counts as "already waiting". */
   now?: () => Date;
+  /**
+   * Where a failed poll goes. A dropped poll is retried either way, but it is
+   * never silent: a second companion running on the same token answers the
+   * same message twice, and swallowing the conflict is how that goes unnoticed
+   * until a student gets two different answers.
+   */
+  onPollError?: (message: string) => void;
 }
 
 /** Raw update shape, narrowed to the fields the companion uses. */
@@ -153,6 +160,7 @@ export class TelegramMessagingProvider
   readonly #ledger = new IdempotencyLedger();
   readonly #deliverBacklog: boolean;
   readonly #startedAt: Date;
+  readonly #onPollError: (message: string) => void;
   #offset = 0;
 
   constructor(options: TelegramOptions) {
@@ -165,6 +173,8 @@ export class TelegramMessagingProvider
     this.#fetch = options.fetchImpl ?? fetch;
     this.#deliverBacklog = options.deliverBacklog ?? false;
     this.#startedAt = (options.now ?? (() => new Date()))();
+    this.#onPollError =
+      options.onPollError ?? ((message) => console.error(message));
   }
 
   allows(conversationId: string): boolean {
@@ -267,6 +277,7 @@ export class TelegramMessagingProvider
         );
       } catch (error) {
         if (options.signal?.aborted) return;
+        this.#onPollError(describePollFailure(error));
         // A dropped poll is transient; back off briefly and keep listening.
         await delay(2000, options.signal);
         if (options.signal?.aborted) return;
@@ -331,6 +342,25 @@ export class TelegramMessagingProvider
     }
     return payload.result;
   }
+}
+
+/**
+ * What to say about a poll that failed.
+ *
+ * 409 gets its own line because it is not a network hiccup and not something
+ * to wait out: Telegram hands each update to whichever poller asked last, so
+ * two companions on one token both answer, and the student sees two replies to
+ * one question — one of them about the wrong exercise.
+ */
+function describePollFailure(error: unknown): string {
+  if (error instanceof TelegramError && error.status === 409) {
+    return (
+      'Another process is already listening to this bot. Stop it — otherwise ' +
+      'both answer, and the student gets two different replies to one message.'
+    );
+  }
+  const detail = error instanceof Error ? error.message : String(error);
+  return `Telegram poll failed, retrying: ${detail}`;
 }
 
 /** 401/404 mean a bad token or bot; retrying forever would just hide that. */

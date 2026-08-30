@@ -7,20 +7,41 @@ import { parseStructured } from '../agent/model-call.js';
 import type { DownloadedAttachment } from '../messaging/port.js';
 import { searchPages, type SearchablePage } from './retrieval.js';
 
-export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.1';
+export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.2';
 export const DEFAULT_TUTOR_MODEL = 'claude-opus-5';
 
 /** How many pages of the book to put in front of the model by default. */
 export const DEFAULT_PAGE_LIMIT = 8;
 
+/**
+ * The shape of a reply, rather than a paragraph of prose.
+ *
+ * A wall of text is the wrong answer even when the maths in it is right: a
+ * student reading it on a phone between lessons cannot see where one step ends
+ * and the next begins. Asking for the parts and assembling them here means the
+ * layout holds on every turn, instead of depending on how the model felt about
+ * formatting that time.
+ */
 const tutorOutputSchema = z.object({
   /**
    * True when the pages given actually cover what was asked. False means say so
    * rather than answering from general knowledge.
    */
   covered: z.boolean(),
-  /** What to say. A refusal is still an answer, so this is never empty. */
-  answer: z.string().min(1),
+  /**
+   * Which exercise this turn is about, named the way the book names it:
+   * "1117 a) x(x - 3)". Null when the turn is not about a specific one.
+   */
+  exercise: z.string().nullable(),
+  /**
+   * The opening line: what to do here. When there is nothing to lay out — a
+   * greeting, a refusal, asking for a photo — this is the whole reply.
+   */
+  message: z.string().min(1),
+  /** One step each, in order, unnumbered. Empty when there is nothing to lay out. */
+  steps: z.array(z.string()),
+  /** The one thing handed back to the student. Null when nothing is asked. */
+  question: z.string().nullable(),
   /** Labels of the pages leaned on, so an answer can be checked. */
   usedPages: z.array(z.string()),
 });
@@ -68,7 +89,21 @@ How to help, when you can:
 - If they ask for the answer outright, give the method and the answer together, so they can see where it came from.
 - If a question needs something you cannot see — the exercise itself, a figure, their working — ask them to photograph it.
 
-Language: Swedish, unless they write to you in something else. One to four short sentences, the way a person texts. No markdown, no headings, no LaTeX, no emoji. Maths typed the way it is on a phone: 2x + 3 = 11, x^2, (a+b)/2.`;
+How to shape the reply. You return parts, and they are assembled for you:
+- exercise: which exercise this is, named as the book names it: "1117 a) x(x - 3)". It tells them you are on the right one. Null when the turn is not about a particular exercise.
+- message: the opening line. What is being done here, in one sentence. When there is nothing to lay out — a greeting, a refusal, asking for a photo — put the whole reply here and leave steps empty.
+- steps: the working, one step per entry, in order. Each entry is one short line of words, and when a step has maths, that maths goes on a line of its own inside the same entry. Do not number them: they are numbered for you. At most four. If the exercise needs more than four, do the first part and hand over.
+- question: the one thing you hand back to them. Null when you are not asking anything.
+
+What that looks like, in parts:
+- exercise: "1117 a) x(x - 3)"
+- message: "Här multiplicerar du in x i parentesen, precis som i exemplet."
+- steps: ["Ta x gånger varje term inuti:\nx · x - x · 3", "Förenkla varje term för sig."]
+- question: "Vad blir de två termerna?"
+
+Never put more than one exercise in one reply. If they ask for several, do the first and offer the next.
+
+Language: Swedish, unless they write to you in something else. Write the way a person texts: short lines, no filler. No markdown, no headings, no bullet characters, no LaTeX, no emoji. Maths typed the way it is on a phone: 2x + 3 = 11, x^2, (a+b)/2.`;
 
 export interface TutorInput {
   question: string;
@@ -159,7 +194,7 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     // A photo of their own book is material too, so a question answered off
     // the picture alone is still grounded.
     covered: parsed.covered && (found.length > 0 || files.length > 0),
-    answer: parsed.answer.trim(),
+    answer: formatAnswer(parsed),
     usedPages,
     consideredPages: found.map((page) => page.label),
     promptVersion: TUTOR_PROMPT_VERSION,
@@ -242,4 +277,32 @@ function pagesAndConversation(
       .join('\n'),
     `Student: ${input.question}`,
   ].join('\n');
+}
+
+/**
+ * Assembles the parts into what the student reads.
+ *
+ * Blank lines between the parts and one numbered line per step is the whole
+ * trick: it survives Telegram, iMessage and a terminal alike, because it is
+ * nothing but line breaks.
+ */
+function formatAnswer(parsed: z.infer<typeof tutorOutputSchema>): string {
+  const blocks: string[] = [];
+
+  const exercise = parsed.exercise?.trim();
+  if (exercise) blocks.push(exercise);
+
+  blocks.push(parsed.message.trim());
+
+  const steps = parsed.steps
+    .map((step) => step.trim())
+    .filter((step) => step !== '');
+  if (steps.length > 0) {
+    blocks.push(steps.map((step, index) => `${index + 1}. ${step}`).join('\n'));
+  }
+
+  const question = parsed.question?.trim();
+  if (question) blocks.push(question);
+
+  return blocks.join('\n\n');
 }

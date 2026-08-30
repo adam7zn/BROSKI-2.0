@@ -123,13 +123,20 @@ const photoDownloader = {
 };
 
 /** A tutor that answers without a model, and records what it was shown. */
-function stubTutor(answer: string, seen: { blocks: unknown[] }) {
+function stubTutor(message: string, seen: { blocks: unknown[] }) {
   return {
     messages: {
       parse: async (params: { messages: Array<{ content: unknown[] }> }) => {
         seen.blocks.push(...(params.messages[0]?.content ?? []));
         return {
-          parsed_output: { covered: true, answer, usedPages: [] },
+          parsed_output: {
+            covered: true,
+            exercise: '1117 a) x(x - 3)',
+            message,
+            steps: [],
+            question: null,
+            usedPages: [],
+          },
         };
       },
     },
@@ -193,4 +200,57 @@ test('a photo of maths with no caption is helped with, not just filed', async ()
   assert.ok(
     seen.blocks.some((block) => (block as { type?: string }).type === 'image'),
   );
+});
+
+test('a photo sent with a question gets the answer, not a receipt too', async () => {
+  const config = configFor('photo-caption');
+  profileFor(config.databasePath);
+
+  const messaging = new FakeMessagingProvider();
+  const controller = new AbortController();
+  const seen = { blocks: [] as unknown[] };
+
+  const running = serve({
+    config,
+    messaging,
+    inbound: messaging,
+    downloader: photoDownloader,
+    reader: new ScriptedDocumentReader({
+      kind: 'material',
+      summary: 'Uppgifter 1117-1129',
+      courseName: null,
+      rows: [],
+      extractedText: '1117 a) x(x - 3)',
+      confidence: 0.9,
+    }),
+    tutorClient: stubTutor('Multiplicera in x i parentesen.', seen),
+    conversationId: 'chat-1',
+    signal: controller.signal,
+    stopAfterOne: false,
+    force: false,
+  });
+
+  await sleep(20);
+  messaging.deliver('chat-1', 'Lös första frågan', [
+    {
+      kind: 'photo',
+      providerFileId: 'file-2',
+      fileName: 'sida.png',
+      mimeType: 'image/png',
+      sizeBytes: 4,
+    },
+  ]);
+  await sleep(80);
+  controller.abort();
+  await running;
+
+  // One reply, and it is the help. "Sparat: ..." above the answer only pushes
+  // the answer off the screen.
+  const replies = messaging.sent.map((sent) => sent.text);
+  assert.equal(
+    replies.length,
+    1,
+    `expected one reply, got ${JSON.stringify(replies)}`,
+  );
+  assert.match(replies[0]!, /Multiplicera in x/);
 });

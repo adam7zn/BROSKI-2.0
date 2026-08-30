@@ -378,11 +378,16 @@ async function handleAttachments(input: {
     });
     input.remember({ savedPages, file, kind });
 
-    // A page of maths with no caption gets helped with, not filed. A plan or a
-    // timetable gets the receipt, because what it changed is worth saying.
-    if (isMaths(kind) && input.event.text === '') {
-      await input.tutorAboutPhoto(attachment.providerFileId);
+    if (isMaths(kind)) {
+      // Showing it a page is asking about it. With nothing typed, the help is
+      // the reply; with a caption, the caption is answered a moment later and
+      // a receipt saying the page was saved would only push that off screen.
+      if (input.event.text === '') {
+        await input.tutorAboutPhoto(attachment.providerFileId);
+      }
     } else {
+      // A plan or a timetable gets the receipt: what it changed is worth
+      // saying, and there is nothing to help with.
       await say(message, attachment.providerFileId);
     }
   }
