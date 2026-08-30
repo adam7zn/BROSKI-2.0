@@ -287,6 +287,13 @@ prompt, expected answer, rubric, and bounded transcript. It does not receive the
 surrounding textbook page, or complete book. A timeout, rate limit, or schema-invalid response
 preserves the claimed inbound evidence, fails the turn, and creates no feedback outbox row.
 
+After completion, the latest completed verified-exercise session remains routable for related
+questions about that exercise. Each reply is a normal durable inbox/outbox turn, the session stays
+completed, and the accepted result is never rewritten. Claude receives the same bounded exercise
+context and recent transcript. Unrelated or low-confidence requests receive a fixed boundary; a
+provider failure still fails closed without invented feedback. Starting a new exercise remains an
+explicit authenticated action.
+
 The smarter agent adapter must implement this exact in-process boundary:
 
 ```ts

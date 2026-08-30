@@ -491,6 +491,78 @@ describe('PostgresInteractionRepository', () => {
       }),
     ).resolves.toBe('lost_claim');
     await expect(restarted.listOutbox('demo-001')).resolves.toHaveLength(2);
+
+    const followUpMessage = {
+      ...message,
+      providerEventId: 'sendblue-in-follow-up-1',
+      providerMessageId: 'sendblue-in-follow-up-1',
+      turnNumber: 1,
+      content: 'Why does that work?',
+      receivedAt: '2026-08-29T12:06:00.000Z',
+      createdAt: '2026-08-29T12:06:00.000Z',
+      updatedAt: '2026-08-29T12:06:00.000Z',
+    };
+    await expect(
+      restarted.findRoutableSession('sendblue', '+46700000000', '+13470000000'),
+    ).resolves.toMatchObject({ status: 'completed', turnNumber: 1 });
+    await expect(
+      restarted.enqueueInbound({
+        message: followUpMessage,
+        event: {
+          ...inboundEvent,
+          providerEventId: 'sendblue-in-follow-up-1',
+          providerMessageId: 'sendblue-in-follow-up-1',
+          occurredAt: followUpMessage.receivedAt,
+        },
+      }),
+    ).resolves.toBe('queued');
+    const claimedFollowUp = await restarted.claimInbound({
+      now: '2026-08-29T12:06:01.000Z',
+      staleBefore: '2026-08-29T12:05:00.000Z',
+    });
+    const followUpOutput = {
+      outbound: [
+        {
+          purpose: 'follow-up',
+          text: 'Because substituting the input gives the verified value.',
+          mediaUrl: null,
+        },
+      ],
+      agentState: { step: 'complete' },
+      profile: null,
+      result: null,
+      status: 'waiting' as const,
+    };
+    await expect(
+      restarted.completeInbound({
+        message: claimedFollowUp!,
+        output: followUpOutput,
+        outbounds: [
+          {
+            interactionId: 'demo-001',
+            idempotencyKey: 'demo-001:turn:2:intent:00',
+            turnNumber: 2,
+            purpose: 'follow-up',
+            content: followUpOutput.outbound[0]!.text,
+            mediaUrl: null,
+            traceId: 'hosted-trace',
+            createdAt: '2026-08-29T12:06:02.000Z',
+          },
+        ],
+        now: '2026-08-29T12:06:02.000Z',
+      }),
+    ).resolves.toBe('completed');
+    await expect(restarted.findSession('demo-001')).resolves.toMatchObject({
+      status: 'completed',
+      turnNumber: 2,
+    });
+    await expect(
+      repository.getByInteractionId('demo-001'),
+    ).resolves.toMatchObject({
+      ...result,
+      completedAt: new Date(feedback.createdAt),
+    });
+    await expect(restarted.listOutbox('demo-001')).resolves.toHaveLength(3);
   });
 
   it('clears only the guarded synthetic fixture', async () => {

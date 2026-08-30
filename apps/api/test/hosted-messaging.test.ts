@@ -62,6 +62,19 @@ test('runs launch -> Sendblue webhook replies -> agent -> persisted result', asy
   assert.equal(JSON.stringify(inspected).includes(participant), false);
   assert.equal(JSON.stringify(inspected).includes(line), false);
   assert.equal(inspected.session?.status, 'completed');
+
+  const originalResult = interaction.result;
+  await fixture.reply('Why does that work?', 'in-5');
+  const afterFollowUp = await fixture.app.service.get('demo-001', 'request');
+  const followedUp = await fixture.app.messaging!.inspect(
+    'demo-001',
+    'request',
+  );
+  assert.deepEqual(afterFollowUp.result, originalResult);
+  assert.equal(followedUp.session?.status, 'completed');
+  assert.equal(followedUp.session?.turnNumber, 5);
+  assert.equal(fixture.provider.sent.length, 7);
+  assert.match(fixture.provider.sent[6]?.text ?? '', /exercise is complete/i);
 });
 
 test('launches the manually selected verified prompt unchanged through the durable outbox', async () => {

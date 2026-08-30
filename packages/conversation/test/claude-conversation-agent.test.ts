@@ -186,6 +186,106 @@ test('forces resolution at the six-turn limit and records the final reply', asyn
   assert.equal(output.result?.result, 'unclear');
 });
 
+test('answers a bounded follow-up without replacing the completed result', async () => {
+  let capturedMessage = '';
+  const agent = new ClaudeConversationAgent({
+    studyAgent: {
+      askQuestion: async () => {
+        throw new Error('unused');
+      },
+      respond: async () => {
+        throw new Error('unused');
+      },
+      followUp: async (input) => {
+        capturedMessage = input.message;
+        return {
+          related: true,
+          message: 'Because substituting x = 0 removes both x terms.',
+          confidence: 0.95,
+          meta: {
+            agent: 'claude-follow-up',
+            model: 'fake-claude',
+            promptVersion: 'test-follow-up',
+          },
+        };
+      },
+    },
+  });
+
+  const output = await agent.handleInbound({
+    interactionId: context.interactionId,
+    context,
+    exercise,
+    text: 'Why does that work?',
+    receivedAt: '2026-08-30T08:07:00.000Z',
+    history: [
+      {
+        direction: 'outbound',
+        text: exercise.prompt,
+        occurredAt: '2026-08-30T08:00:00.000Z',
+      },
+      {
+        direction: 'inbound',
+        text: exercise.answerPayload.canonical,
+        occurredAt: '2026-08-30T08:01:00.000Z',
+      },
+    ],
+    agentState: { step: 'complete' },
+    traceId: 'trace-1',
+  });
+
+  assert.equal(capturedMessage, 'Why does that work?');
+  assert.equal(output.status, 'waiting');
+  assert.equal(output.result, null);
+  assert.equal(output.outbound[0]?.purpose, 'follow-up');
+});
+
+test('enforces the unrelated follow-up boundary returned by Claude', async () => {
+  const agent = new ClaudeStudyAgent({
+    client: fakeAnthropicClient(async () => ({
+      parsed_output: {
+        related: false,
+        message: 'An unsafe unrelated answer.',
+        confidence: 0.99,
+      },
+    })),
+  });
+  const input = claudeRespondInput();
+  const turn = await agent.followUp({
+    context: input.context,
+    question: input.question,
+    transcript: input.transcript,
+    message: 'Tell me something unrelated.',
+  });
+
+  assert.equal(turn.related, false);
+  assert.match(turn.message, /only help with the textbook exercise/i);
+  assert.equal(turn.message.includes('unsafe unrelated'), false);
+});
+
+test('uses the fixed boundary for a low-confidence related classification', async () => {
+  const agent = new ClaudeStudyAgent({
+    client: fakeAnthropicClient(async () => ({
+      parsed_output: {
+        related: true,
+        message: 'An uncertain answer that must not be sent.',
+        confidence: 0.3,
+      },
+    })),
+  });
+  const input = claudeRespondInput();
+  const turn = await agent.followUp({
+    context: input.context,
+    question: input.question,
+    transcript: input.transcript,
+    message: 'Maybe explain it?',
+  });
+
+  assert.equal(turn.related, false);
+  assert.match(turn.message, /only help with the textbook exercise/i);
+  assert.equal(turn.message.includes('uncertain answer'), false);
+});
+
 test('propagates model failures so the durable worker can fail closed', async () => {
   const agent = new ClaudeConversationAgent({
     studyAgent: {

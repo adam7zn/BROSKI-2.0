@@ -210,7 +210,11 @@ export class HostedMessagingService {
         now: this.#now().toISOString(),
       });
     }
-    return { ...session, status: 'stopped', updatedAt: this.#now().toISOString() };
+    return {
+      ...session,
+      status: 'stopped',
+      updatedAt: this.#now().toISOString(),
+    };
   }
 
   async ingestWebhook(
@@ -293,7 +297,7 @@ export class HostedMessagingService {
       return { outcome: 'ignored', reason: 'not-allowlisted' };
     }
 
-    const session = await this.options.repository.findActiveSession(
+    const session = await this.options.repository.findRoutableSession(
       providerName,
       this.options.participantAddress,
       this.options.providerLine,
@@ -489,7 +493,10 @@ export class HostedMessageWorker {
           message.traceId,
         ),
       ]);
-      if (!session || session.status !== 'active') {
+      if (
+        !session ||
+        (session.status !== 'active' && session.status !== 'completed')
+      ) {
         await this.options.repository.discardInbound({
           message,
           errorCode: 'SESSION_NOT_ACTIVE',
@@ -532,11 +539,12 @@ export class HostedMessageWorker {
         ),
         now,
       });
-    } catch {
+    } catch (error) {
       const now = this.options.now().toISOString();
+      const errorCode = classifyAgentFailure(error);
       await this.options.repository.failInbound({
         message,
-        errorCode: 'AGENT_PROCESSING_FAILED',
+        errorCode,
         now,
       });
       this.options.logger.write({
@@ -545,7 +553,7 @@ export class HostedMessageWorker {
         traceId: message.traceId,
         interactionId: message.interactionId,
         status: 500,
-        code: 'AGENT_PROCESSING_FAILED',
+        code: errorCode,
       });
     }
   }
@@ -634,6 +642,39 @@ export class HostedMessageWorker {
       });
     }
   }
+}
+
+function classifyAgentFailure(error: unknown): string {
+  if (typeof error === 'object' && error !== null) {
+    const candidate = error as {
+      constructor?: { name?: unknown };
+      name?: unknown;
+      status?: unknown;
+    };
+    const providerErrorNames = new Set([
+      'APIError',
+      'BadRequestError',
+      'AuthenticationError',
+      'PermissionDeniedError',
+      'NotFoundError',
+      'ConflictError',
+      'UnprocessableEntityError',
+      'RateLimitError',
+      'InternalServerError',
+    ]);
+    if (
+      typeof candidate.constructor?.name === 'string' &&
+      providerErrorNames.has(candidate.constructor.name) &&
+      typeof candidate.status === 'number' &&
+      Number.isInteger(candidate.status) &&
+      candidate.status >= 400 &&
+      candidate.status <= 599
+    ) {
+      return `AGENT_PROVIDER_HTTP_${candidate.status}`;
+    }
+    if (candidate.name === 'ModelOutputError') return 'AGENT_OUTPUT_INVALID';
+  }
+  return 'AGENT_PROCESSING_FAILED';
 }
 
 function validateAgentOutput(

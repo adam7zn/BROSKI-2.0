@@ -182,7 +182,10 @@ Ten manually started interactions use real material and can be reviewed from sou
   10/6/4 easy/medium/hard, but imported rows remain drafts until William reviews them;
 - authenticated routes list verified metadata and start one explicitly selected exercise;
 - the Anthropic adapter keeps onboarding deterministic, sends the approved prompt unchanged, and
-  fails closed on provider or model-output errors.
+  fails closed on provider or model-output errors;
+- after a verified exercise is completed, related follow-up messages can receive bounded Claude
+  explanations while the original result remains first-write-only; unrelated or low-confidence
+  messages receive a fixed boundary and do not turn the companion into a general chat bot.
 
 Phase 4 is not complete until at least ten real-material interactions have passed the full review,
 messaging, feedback, and durable-result loop. Hosted migration/import, Anthropic activation, and

@@ -87,7 +87,7 @@ export interface HostedMessagingRepository {
     outbounds: NewOutboundIntent[],
   ): Promise<'created' | 'duplicate' | 'not_found'>;
   findSession(interactionId: string): Promise<MessagingSession | null>;
-  findActiveSession(
+  findRoutableSession(
     provider: string,
     participantAddress: string,
     providerLine: string,
@@ -191,18 +191,24 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
     return value ? clone(value) : null;
   }
 
-  async findActiveSession(
+  async findRoutableSession(
     provider: string,
     participantAddress: string,
     providerLine: string,
   ): Promise<MessagingSession | null> {
-    const value = [...this.#sessions.values()].find(
-      (session) =>
-        session.status === 'active' &&
-        session.provider === provider &&
-        session.participantAddress === participantAddress &&
-        session.providerLine === providerLine,
-    );
+    const value = [...this.#sessions.values()]
+      .filter(
+        (session) =>
+          (session.status === 'active' || session.status === 'completed') &&
+          session.provider === provider &&
+          session.participantAddress === participantAddress &&
+          session.providerLine === providerLine,
+      )
+      .sort((left, right) => {
+        if (left.status === 'active' && right.status !== 'active') return -1;
+        if (right.status === 'active' && left.status !== 'active') return 1;
+        return right.updatedAt.localeCompare(left.updatedAt);
+      })[0];
     return value ? clone(value) : null;
   }
 
@@ -305,9 +311,14 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
       return 'lost_claim';
     }
     const session = this.#sessions.get(input.message.interactionId);
+    const isCompletedFollowUp =
+      session?.status === 'completed' &&
+      input.output.status === 'waiting' &&
+      input.output.result === null &&
+      input.output.profile === null;
     if (
       !session ||
-      session.status !== 'active' ||
+      (session.status !== 'active' && !isCompletedFollowUp) ||
       session.turnNumber !== input.message.turnNumber
     ) {
       this.#inbound.set(key, {
@@ -350,8 +361,9 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
     }
     this.#sessions.set(session.interactionId, {
       ...session,
-      status:
-        input.output.status === 'waiting'
+      status: isCompletedFollowUp
+        ? 'completed'
+        : input.output.status === 'waiting'
           ? 'active'
           : input.output.status === 'completed'
             ? 'completed'

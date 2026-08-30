@@ -170,11 +170,16 @@ export class DeterministicDemoAgent implements ConversationAgent {
     }
 
     return output({
-      outbound: [],
+      outbound: [
+        textIntent(
+          'follow-up-boundary',
+          'This exercise is complete. Start a new exercise for another question.',
+        ),
+      ],
       agentState: serializeState(state),
       profile: null,
       result: null,
-      status: 'completed',
+      status: 'waiting',
     });
   }
 }

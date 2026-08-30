@@ -201,7 +201,7 @@ export class PostgresHostedMessagingRepository {
     return found.rows[0] ? toSession(found.rows[0]) : null;
   }
 
-  async findActiveSession(
+  async findRoutableSession(
     provider: string,
     participantAddress: string,
     providerLine: string,
@@ -209,7 +209,9 @@ export class PostgresHostedMessagingRepository {
     const found = await this.pool.query<SessionRow>(
       `SELECT ${sessionColumns} FROM demo_messaging_sessions
        WHERE provider = $1 AND participant_address = $2
-         AND provider_line = $3 AND status = 'active'`,
+         AND provider_line = $3 AND status IN ('active', 'completed')
+       ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC
+       LIMIT 1`,
       [provider, participantAddress, providerLine],
     );
     return found.rows[0] ? toSession(found.rows[0]) : null;
@@ -372,9 +374,14 @@ export class PostgresHostedMessagingRepository {
         [input.message.interactionId],
       );
       const currentSession = session.rows[0];
+      const isCompletedFollowUp =
+        currentSession?.status === 'completed' &&
+        input.output.status === 'waiting' &&
+        input.output.result === null &&
+        input.output.profile === null;
       if (
         !currentSession ||
-        currentSession.status !== 'active' ||
+        (currentSession.status !== 'active' && !isCompletedFollowUp) ||
         currentSession.turn_number !== input.message.turnNumber
       ) {
         await client.query(
@@ -439,8 +446,9 @@ export class PostgresHostedMessagingRepository {
         }
       }
       await insertOutbounds(client, input.outbounds);
-      const status =
-        input.output.status === 'waiting'
+      const status = isCompletedFollowUp
+        ? 'completed'
+        : input.output.status === 'waiting'
           ? 'active'
           : input.output.status === 'completed'
             ? 'completed'

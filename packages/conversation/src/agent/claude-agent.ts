@@ -16,6 +16,8 @@ import {
   MAX_HINTS,
   MIN_CONFIDENCE,
   type AgentTurn,
+  type FollowUpInput,
+  type FollowUpTurn,
   type GeneratedQuestion,
   type RespondInput,
   type StudyAgent,
@@ -44,8 +46,17 @@ const turnOutputSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
+const followUpOutputSchema = z.object({
+  related: z.boolean(),
+  message: z.string().min(1),
+  confidence: z.number().min(0).max(1),
+});
+
+const FOLLOW_UP_BOUNDARY =
+  'I can only help with the textbook exercise we just completed. Start a new exercise for a different topic.';
+
 export class ModelOutputError extends Error {
-  constructor(step: 'askQuestion' | 'respond', cause?: unknown) {
+  constructor(step: 'askQuestion' | 'respond' | 'followUp', cause?: unknown) {
     super(`The model returned no schema-valid output for ${step}.`);
     this.name = 'ModelOutputError';
     this.cause = cause;
@@ -232,6 +243,54 @@ export class ClaudeStudyAgent implements StudyAgent {
       meta: {
         agent: 'claude',
         promptVersion: RESPOND_PROMPT_VERSION,
+        model: this.#model,
+      },
+    };
+  }
+
+  async followUp(input: FollowUpInput): Promise<FollowUpTurn> {
+    const response = await this.#client.messages.parse({
+      model: this.#model,
+      max_tokens: 1200,
+      system: [
+        'You are a concise mathematics tutor handling a follow-up to one completed exercise.',
+        'Decide whether the latest message is about that exercise, its solution, or the mathematics directly needed to understand it.',
+        'If it is related, answer clearly in at most four short sentences. Never invent a different exercise or textbook fact.',
+        'If it is unrelated, set related=false. Do not answer the unrelated request.',
+      ].join(' '),
+      output_config: {
+        effort: 'low',
+        format: zodOutputFormat(followUpOutputSchema),
+      },
+      messages: [
+        {
+          role: 'user',
+          content: [
+            'Verified exercise:',
+            input.question.question,
+            `Verified answer: ${input.question.expectedAnswer ?? '(rubric only)'}`,
+            `Rubric: ${input.question.rubric}`,
+            '',
+            'Recent conversation:',
+            renderTranscript(input.transcript.slice(-12)),
+            '',
+            `Latest follow-up: ${input.message}`,
+          ].join('\n'),
+        },
+      ],
+    });
+    const parsed = response.parsed_output;
+    if (parsed === null || parsed === undefined) {
+      throw new ModelOutputError('followUp');
+    }
+    const related = parsed.related && parsed.confidence >= MIN_CONFIDENCE;
+    return {
+      related,
+      message: related ? parsed.message.trim() : FOLLOW_UP_BOUNDARY,
+      confidence: parsed.confidence,
+      meta: {
+        agent: 'claude-follow-up',
+        promptVersion: 'follow-up/2026-08-30.1',
         model: this.#model,
       },
     };

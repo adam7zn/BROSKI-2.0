@@ -67,12 +67,27 @@ export interface RespondInput {
   canContinue: boolean;
 }
 
+export interface FollowUpInput {
+  context: BackendContext;
+  question: GeneratedQuestion;
+  transcript: TranscriptEntry[];
+  message: string;
+}
+
+export interface FollowUpTurn {
+  related: boolean;
+  message: string;
+  confidence: number;
+  meta: AgentRunMeta;
+}
+
 /**
  * The study agent: one study item, as many turns as the student needs.
  */
 export interface StudyAgent {
   askQuestion(context: BackendContext): Promise<GeneratedQuestion>;
   respond(input: RespondInput): Promise<AgentTurn>;
+  followUp?(input: FollowUpInput): Promise<FollowUpTurn>;
 }
 
 /**

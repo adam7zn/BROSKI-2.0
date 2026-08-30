@@ -48,6 +48,51 @@ export class ClaudeConversationAgent implements ConversationAgent {
     input: AgentInboundTurnInput,
   ): Promise<ConversationAgentOutput> {
     const state = parseState(input.agentState);
+    if (state.step === 'complete') {
+      if (!this.#studyAgent.followUp) {
+        throw new Error('The selected study agent does not support follow-ups');
+      }
+      const reply = input.text.trim();
+      if (!reply) throw new Error('Agent received an empty inbound message');
+      const question = questionFrom(input.exercise);
+      const history = relevantStudyHistory(input.history, question.question);
+      const transcript: TranscriptEntry[] = [
+        ...history.slice(-12).map(
+          (entry) =>
+            ({
+              role: entry.direction === 'outbound' ? 'companion' : 'student',
+              text: entry.text,
+              at: entry.occurredAt,
+            }) satisfies TranscriptEntry,
+        ),
+        { role: 'student', text: reply, at: input.receivedAt },
+      ];
+      const followUp = await this.#studyAgent.followUp({
+        context: input.context,
+        question,
+        transcript,
+        message: reply,
+      });
+      return conversationAgentOutputSchema.parse({
+        outbound: [
+          {
+            purpose: followUp.related ? 'follow-up' : 'follow-up-boundary',
+            text: followUp.message,
+            mediaUrl: null,
+          },
+        ],
+        agentState: {
+          step: 'complete',
+          agent: followUp.meta.agent,
+          model: followUp.meta.model ?? 'none',
+          promptVersion: followUp.meta.promptVersion,
+          confidence: String(followUp.confidence),
+        },
+        profile: null,
+        result: null,
+        status: 'waiting',
+      });
+    }
     if (state.step !== 'answer') {
       return this.#onboarding.handleInbound(input);
     }

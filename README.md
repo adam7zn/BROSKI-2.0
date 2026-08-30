@@ -215,6 +215,10 @@ The start route preserves the approved prompt exactly. Set
 `ANTHROPIC_API_KEY` to use Claude. An explicit Anthropic selection fails startup if the key is
 missing and never falls back silently. On each model turn Claude receives only the selected prompt,
 expected answer, rubric, and relevant transcript—not the page image, surrounding page, or book.
+Once that exercise is completed, the same iMessage conversation accepts bounded related follow-up
+questions. These create durable message turns without changing the first accepted result. Unrelated
+or low-confidence requests receive a fixed boundary, and selecting a different exercise remains a
+manual authenticated action.
 
 Keep both `CONVERSATION_AGENT_PROVIDER=deterministic` and `MESSAGING_LIVE_ENABLED=false` for the
 first deployment. Hosted migration, hosted draft import, Anthropic activation, and any real send
