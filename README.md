@@ -261,5 +261,6 @@ messaging immediately afterward. Automated tests never call Sendblue, Render, or
 paid services, the start command runs the checksum-verified, advisory-lock migration runner before
 starting the API. Therefore the service must not be deployed or restarted with new migrations until
 the read-only local-versus-hosted ledger report has been reviewed and the exact pending forward
-migrations have explicit approval. Likewise, changing `MESSAGING_LIVE_ENABLED` to `true` and running
-the operator command are separate approval-gated actions.
+migrations have explicit approval. Set the operator-managed `MESSAGING_LIVE_ENABLED` value to
+`false` when creating the Blueprint. Changing it to `true` and running the operator command are
+separate approval-gated actions.

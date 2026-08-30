@@ -17,7 +17,7 @@ services:
       - key: SENDBLUE_API_BASE_URL
         value: https://api.sendblue.co
       - key: MESSAGING_LIVE_ENABLED
-        value: 'false'
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: SENDBLUE_API_KEY_ID
