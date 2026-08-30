@@ -17,6 +17,7 @@ import {
 
 import { applyDocument, type ApplyResult } from './apply-document.js';
 import type { Config } from './config.js';
+import type { BookPage } from './local-store.js';
 import { writeCoursePlan } from './course-plan-from-profile.js';
 import type { InteractionStore } from './local-store.js';
 
@@ -41,9 +42,16 @@ export interface HandleUploadInput {
  * The reply it returns is what the student sees: what was understood, how many
  * lessons were placed, and an honest note when the photo was hard to read.
  */
+export interface UploadOutcome {
+  message: string;
+  result: ApplyResult | null;
+  /** Pages this upload added, so the next answer can be grounded in them. */
+  savedPages: BookPage[];
+}
+
 export async function handleUpload(
   input: HandleUploadInput,
-): Promise<{ message: string; result: ApplyResult | null }> {
+): Promise<UploadOutcome> {
   if (
     input.attachment.sizeBytes !== null &&
     input.attachment.sizeBytes > MAX_UPLOAD_BYTES
@@ -51,6 +59,7 @@ export async function handleUpload(
     return {
       message: 'Den filen är för stor för mig. Ta en bild av sidan istället.',
       result: null,
+      savedPages: [],
     };
   }
 
@@ -61,6 +70,7 @@ export async function handleUpload(
     return {
       message: 'Jag kom inte åt filen. Kan du skicka den igen?',
       result: null,
+      savedPages: [],
     };
   }
 
@@ -69,7 +79,7 @@ export async function handleUpload(
     reading = await input.reader.read(file);
   } catch (error) {
     if (error instanceof UnsupportedFileError) {
-      return { message: error.message, result: null };
+      return { message: error.message, result: null, savedPages: [] };
     }
     throw error;
   }
@@ -92,16 +102,18 @@ export async function handleUpload(
   }
   // A page of the book is worth keeping as a page of the book, not only as
   // something to practise on: the next question may be about it.
+  const savedPages: BookPage[] = [];
   if (
     (reading.kind === 'material' || reading.kind === 'assignment') &&
     reading.extractedText?.trim()
   ) {
-    input.store.saveBookPage({
+    const page: BookPage = {
       id: `upload:${input.attachment.providerFileId}`,
       label: reading.summary.trim().slice(0, 40) || 'Uppladdad sida',
       text: reading.extractedText.trim(),
-      sourceKind: 'uploaded',
-    });
+    };
+    input.store.saveBookPage({ ...page, sourceKind: 'uploaded' });
+    savedPages.push(page);
   }
 
   if (result.nextAssessment) {
@@ -112,7 +124,7 @@ export async function handleUpload(
     });
   }
 
-  return { message: result.message, result };
+  return { message: result.message, result, savedPages };
 }
 
 export function writeStudyPlan(path: string, items: StudyItem[]): void {

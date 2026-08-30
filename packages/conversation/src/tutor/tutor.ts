@@ -59,6 +59,14 @@ export interface TutorInput {
   /** The conversation so far, oldest first. */
   history?: TutorMessage[];
   pages: SearchablePage[];
+  /**
+   * Pages that go in front of the model whatever the search says.
+   *
+   * A page the student photographed seconds ago is what they are asking about,
+   * even when their words share no keywords with it — "hur löser jag första
+   * frågan" matches nothing, and the picture is the whole question.
+   */
+  pinned?: SearchablePage[];
   client?: Anthropic;
   model?: string;
   /** How many pages to put in front of the model. */
@@ -77,7 +85,7 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     input.client ?? new Anthropic({ maxRetries: 3, timeout: 60_000 });
   const model = input.model ?? process.env['MSC_MODEL'] ?? DEFAULT_TUTOR_MODEL;
 
-  if (input.pages.length === 0) {
+  if (input.pages.length === 0 && pinnedLength(input) === 0) {
     return {
       covered: false,
       answer:
@@ -95,11 +103,18 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     .slice(-4)
     .map((entry) => entry.text)
     .join(' ');
-  const found = searchPages(
+  const pinned = input.pinned ?? [];
+  const searched = searchPages(
     input.pages,
     `${input.question} ${recent}`,
-    input.pageLimit ?? 3,
+    input.pageLimit ?? 5,
   );
+  // Pinned first, then whatever search found that is not already there.
+  const pinnedIds = new Set(pinned.map((page) => page.id));
+  const found = [
+    ...pinned.map((page) => ({ ...page, score: Number.POSITIVE_INFINITY })),
+    ...searched.filter((page) => !pinnedIds.has(page.id)),
+  ];
 
   const parsed = await parseStructured<z.infer<typeof tutorOutputSchema>>(
     client,
@@ -150,4 +165,8 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     promptVersion: TUTOR_PROMPT_VERSION,
     model,
   };
+}
+
+function pinnedLength(input: TutorInput): number {
+  return input.pinned?.length ?? 0;
 }

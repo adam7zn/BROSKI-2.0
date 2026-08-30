@@ -15,6 +15,7 @@ import {
 
 import type { Config } from './config.js';
 import { handleUpload } from './handle-upload.js';
+import type { BookPage } from './local-store.js';
 import { ensureProfile } from './setup-gate.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
@@ -50,6 +51,10 @@ export async function serve(options: ServeOptions): Promise<void> {
     ? new ClaudeDocumentReader()
     : null;
 
+  // What the student photographed most recently. A question that arrives with
+  // a picture, or right after one, is almost always about that picture.
+  let recentlyUploaded: BookPage[] = [];
+
   const pump = inbox.pump(inbound, signal, {
     intercept: (event) => {
       console.log(
@@ -66,6 +71,9 @@ export async function serve(options: ServeOptions): Promise<void> {
         store,
         config,
         conversationId,
+        onPagesSaved: (pages) => {
+          if (pages.length > 0) recentlyUploaded = pages;
+        },
       });
     },
   });
@@ -128,6 +136,7 @@ export async function serve(options: ServeOptions): Promise<void> {
         question: incoming.text,
         history,
         pages: store.bookPages(),
+        pinned: recentlyUploaded,
       });
       history.push({ role: 'student', text: incoming.text });
       history.push({ role: 'companion', text: turn.answer });
@@ -240,6 +249,7 @@ async function handleAttachments(input: {
   store: ReturnType<typeof openStore>;
   config: Config;
   conversationId: string;
+  onPagesSaved?: (pages: BookPage[]) => void;
 }): Promise<boolean> {
   const { attachments } = input.event;
   if (attachments.length === 0) return false;
@@ -266,7 +276,7 @@ async function handleAttachments(input: {
 
   for (const attachment of attachments) {
     console.log(`  upload     ${attachment.kind}`);
-    const { message } = await handleUpload({
+    const { message, savedPages } = await handleUpload({
       attachment,
       downloader: input.downloader,
       reader: input.reader,
@@ -275,6 +285,7 @@ async function handleAttachments(input: {
       store: input.store,
       conversationId: input.conversationId,
     });
+    input.onPagesSaved?.(savedPages);
     await say(message, attachment.providerFileId);
   }
 

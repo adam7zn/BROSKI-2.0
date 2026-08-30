@@ -167,3 +167,49 @@ test('a follow-up finds the page the conversation is about', async () => {
   // "och sen då?" alone matches nothing; the history is what finds the page.
   assert.match(prompts[0]!, /s\. 84/);
 });
+
+test('a page just photographed is used even when the words match nothing', async () => {
+  const prompts: string[] = [];
+  const photographed = {
+    id: 'upload:abc',
+    label: 'Uppgifter 1117–1129',
+    text: '1117 a) x(x - 3)  b) x^3(2 - 3x)  1118 a) (x + 3)(x + 7)',
+  };
+
+  const turn = await runTutorTurn({
+    // Nothing here matches the page: no keyword overlap at all.
+    question: 'hur löser jag första frågan',
+    pages,
+    pinned: [photographed],
+    client: stubClient(
+      {
+        covered: true,
+        answer: 'Börja med att multiplicera in x i parentesen.',
+        usedPages: ['Uppgifter 1117–1129'],
+      },
+      (prompt) => prompts.push(prompt),
+    ),
+  });
+
+  assert.match(prompts[0]!, /Uppgifter 1117/);
+  assert.match(prompts[0]!, /x\(x - 3\)/);
+  // The page counts as used, because it really was in front of the model.
+  assert.deepEqual(turn.usedPages, ['Uppgifter 1117–1129']);
+  assert.equal(turn.covered, true);
+});
+
+test('a photographed page works even with no book indexed at all', async () => {
+  const turn = await runTutorTurn({
+    question: 'vad ska jag göra här',
+    pages: [],
+    pinned: [{ id: 'upload:x', label: 'Uppgift 12', text: 'Lös 2x + 3 = 11.' }],
+    client: stubClient({
+      covered: true,
+      answer: 'Ta bort trean från båda sidor först.',
+      usedPages: ['Uppgift 12'],
+    }),
+  });
+
+  assert.equal(turn.covered, true);
+  assert.match(turn.answer, /trean/);
+});
