@@ -209,7 +209,9 @@ export class PostgresHostedMessagingRepository {
     const found = await this.pool.query<SessionRow>(
       `SELECT ${sessionColumns} FROM demo_messaging_sessions
        WHERE provider = $1 AND participant_address = $2
-         AND provider_line = $3 AND status IN ('active', 'completed')
+         AND provider_line = $3
+         AND (status IN ('active', 'completed')
+           OR (status = 'failed' AND agent_state ->> 'step' = 'complete'))
        ORDER BY CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC
        LIMIT 1`,
       [provider, participantAddress, providerLine],
@@ -368,14 +370,17 @@ export class PostgresHostedMessagingRepository {
       const session = await client.query<{
         status: HostedMessagingSessionRecord['status'];
         turn_number: number;
+        agent_state: unknown;
       }>(
-        `SELECT status, turn_number FROM demo_messaging_sessions
+        `SELECT status, turn_number, agent_state FROM demo_messaging_sessions
          WHERE interaction_id = $1 FOR UPDATE`,
         [input.message.interactionId],
       );
       const currentSession = session.rows[0];
       const isCompletedFollowUp =
-        currentSession?.status === 'completed' &&
+        (currentSession?.status === 'completed' ||
+          (currentSession?.status === 'failed' &&
+            isCompletedAgentState(currentSession.agent_state))) &&
         input.output.status === 'waiting' &&
         input.output.result === null &&
         input.output.profile === null;
@@ -456,7 +461,7 @@ export class PostgresHostedMessagingRepository {
       await client.query(
         `UPDATE demo_messaging_sessions
          SET status = $2, turn_number = turn_number + 1,
-             agent_state = $3::jsonb, updated_at = $4
+             agent_state = $3::jsonb, failure_code = NULL, updated_at = $4
          WHERE interaction_id = $1`,
         [
           input.message.interactionId,
@@ -519,7 +524,13 @@ export class PostgresHostedMessagingRepository {
          RETURNING interaction_id
        )
        UPDATE demo_messaging_sessions session
-       SET status = 'failed', failure_code = $4, updated_at = $5
+       SET status = CASE
+             WHEN session.status = 'completed'
+               AND session.agent_state ->> 'step' = 'complete'
+             THEN 'completed'
+             ELSE 'failed'
+           END,
+           failure_code = $4, updated_at = $5
        FROM failed WHERE session.interaction_id = failed.interaction_id`,
       [
         input.message.provider,
@@ -770,6 +781,15 @@ export class PostgresHostedMessagingRepository {
     );
     return found.rows.map(toOutbound);
   }
+}
+
+function isCompletedAgentState(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>)['step'] === 'complete'
+  );
 }
 
 async function insertOutbounds(

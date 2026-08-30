@@ -199,7 +199,10 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
     const value = [...this.#sessions.values()]
       .filter(
         (session) =>
-          (session.status === 'active' || session.status === 'completed') &&
+          (session.status === 'active' ||
+            session.status === 'completed' ||
+            (session.status === 'failed' &&
+              isCompletedAgentState(session.agentState))) &&
           session.provider === provider &&
           session.participantAddress === participantAddress &&
           session.providerLine === providerLine,
@@ -312,7 +315,9 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
     }
     const session = this.#sessions.get(input.message.interactionId);
     const isCompletedFollowUp =
-      session?.status === 'completed' &&
+      (session?.status === 'completed' ||
+        (session?.status === 'failed' &&
+          isCompletedAgentState(session.agentState))) &&
       input.output.status === 'waiting' &&
       input.output.result === null &&
       input.output.profile === null;
@@ -370,6 +375,7 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
             : 'stopped',
       turnNumber: session.turnNumber + 1,
       agentState: structuredClone(input.output.agentState),
+      failureCode: isCompletedFollowUp ? null : session.failureCode,
       updatedAt: input.now,
     });
     this.#insertOutbounds(input.outbounds);
@@ -418,6 +424,18 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
       errorCode: input.errorCode,
       updatedAt: input.now,
     });
+    const session = this.#sessions.get(current.interactionId);
+    if (
+      session?.status === 'completed' &&
+      isCompletedAgentState(session.agentState)
+    ) {
+      this.#sessions.set(session.interactionId, {
+        ...session,
+        failureCode: input.errorCode,
+        updatedAt: input.now,
+      });
+      return;
+    }
     await this.stopSession({
       interactionId: current.interactionId,
       status: 'failed',
@@ -597,6 +615,15 @@ export class InMemoryHostedMessagingRepository implements HostedMessagingReposit
       });
     }
   }
+}
+
+function isCompletedAgentState(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>)['step'] === 'complete'
+  );
 }
 
 function inboundKey(

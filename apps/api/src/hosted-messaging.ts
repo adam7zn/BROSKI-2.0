@@ -495,7 +495,12 @@ export class HostedMessageWorker {
       ]);
       if (
         !session ||
-        (session.status !== 'active' && session.status !== 'completed')
+        (session.status !== 'active' &&
+          session.status !== 'completed' &&
+          !(
+            session.status === 'failed' &&
+            isCompletedAgentState(session.agentState)
+          ))
       ) {
         await this.options.repository.discardInbound({
           message,
@@ -650,6 +655,7 @@ function classifyAgentFailure(error: unknown): string {
       constructor?: { name?: unknown };
       name?: unknown;
       status?: unknown;
+      message?: unknown;
     };
     const providerErrorNames = new Set([
       'APIError',
@@ -670,11 +676,30 @@ function classifyAgentFailure(error: unknown): string {
       candidate.status >= 400 &&
       candidate.status <= 599
     ) {
+      const message =
+        typeof candidate.message === 'string'
+          ? candidate.message.toLowerCase()
+          : '';
+      if (message.includes('credit')) return 'AGENT_PROVIDER_CREDIT';
+      if (message.includes('model')) return 'AGENT_PROVIDER_MODEL';
+      if (message.includes('schema')) return 'AGENT_PROVIDER_SCHEMA';
+      if (message.includes('max_tokens')) return 'AGENT_PROVIDER_TOKEN_LIMIT';
+      if (message.includes('thinking')) return 'AGENT_PROVIDER_THINKING';
+      if (message.includes('effort')) return 'AGENT_PROVIDER_EFFORT';
       return `AGENT_PROVIDER_HTTP_${candidate.status}`;
     }
     if (candidate.name === 'ModelOutputError') return 'AGENT_OUTPUT_INVALID';
   }
   return 'AGENT_PROCESSING_FAILED';
+}
+
+function isCompletedAgentState(value: unknown): boolean {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as Record<string, unknown>)['step'] === 'complete'
+  );
 }
 
 function validateAgentOutput(

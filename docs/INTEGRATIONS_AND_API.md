@@ -292,7 +292,8 @@ questions about that exercise. Each reply is a normal durable inbox/outbox turn,
 completed, and the accepted result is never rewritten. Claude receives the same bounded exercise
 context and recent transcript. Unrelated or low-confidence requests receive a fixed boundary; a
 provider failure still fails closed without invented feedback. Starting a new exercise remains an
-explicit authenticated action.
+explicit authenticated action. A failed follow-up does not erase or permanently stop the completed
+exercise session; a later provider event can recover it while the failed inbound evidence remains.
 
 The smarter agent adapter must implement this exact in-process boundary:
 

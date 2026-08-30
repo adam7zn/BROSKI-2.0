@@ -502,9 +502,14 @@ describe('PostgresInteractionRepository', () => {
       createdAt: '2026-08-29T12:06:00.000Z',
       updatedAt: '2026-08-29T12:06:00.000Z',
     };
+    await pool.query(
+      `UPDATE demo_messaging_sessions
+       SET status = 'failed', failure_code = 'AGENT_PROVIDER_HTTP_400'
+       WHERE interaction_id = 'demo-001'`,
+    );
     await expect(
       restarted.findRoutableSession('sendblue', '+46700000000', '+13470000000'),
-    ).resolves.toMatchObject({ status: 'completed', turnNumber: 1 });
+    ).resolves.toMatchObject({ status: 'failed', turnNumber: 1 });
     await expect(
       restarted.enqueueInbound({
         message: followUpMessage,
@@ -555,6 +560,7 @@ describe('PostgresInteractionRepository', () => {
     await expect(restarted.findSession('demo-001')).resolves.toMatchObject({
       status: 'completed',
       turnNumber: 2,
+      failureCode: null,
     });
     await expect(
       repository.getByInteractionId('demo-001'),

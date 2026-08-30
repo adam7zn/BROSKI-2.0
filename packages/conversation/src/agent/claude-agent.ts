@@ -93,7 +93,6 @@ export class ClaudeStudyAgent implements StudyAgent {
       max_tokens: 2000,
       system: questionSystemPrompt(context.mode),
       output_config: {
-        effort: 'low',
         format: zodOutputFormat(questionOutputSchema),
       },
       messages: [
@@ -168,7 +167,6 @@ export class ClaudeStudyAgent implements StudyAgent {
         .filter(Boolean)
         .join('\n\n'),
       output_config: {
-        effort: 'medium',
         format: zodOutputFormat(turnOutputSchema),
       },
       messages: [
@@ -251,7 +249,7 @@ export class ClaudeStudyAgent implements StudyAgent {
   async followUp(input: FollowUpInput): Promise<FollowUpTurn> {
     const response = await this.#client.messages.parse({
       model: this.#model,
-      max_tokens: 1200,
+      max_tokens: 4096,
       system: [
         'You are a concise mathematics tutor handling a follow-up to one completed exercise.',
         'Decide whether the latest message is about that exercise, its solution, or the mathematics directly needed to understand it.',
@@ -259,7 +257,6 @@ export class ClaudeStudyAgent implements StudyAgent {
         'If it is unrelated, set related=false. Do not answer the unrelated request.',
       ].join(' '),
       output_config: {
-        effort: 'low',
         format: zodOutputFormat(followUpOutputSchema),
       },
       messages: [
