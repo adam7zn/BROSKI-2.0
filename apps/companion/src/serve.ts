@@ -22,6 +22,10 @@ import type { Config } from './config.js';
 import { handleUpload } from './handle-upload.js';
 import type { BookPage } from './local-store.js';
 import { ensureProfile } from './setup-gate.js';
+import {
+  acquireSingleInstance,
+  AlreadyRunningError,
+} from './single-instance.js';
 import { buildAgent, openStore, planNextInteraction } from './wire.js';
 
 /**
@@ -93,6 +97,19 @@ export interface ServeOptions {
 
 export async function serve(options: ServeOptions): Promise<void> {
   const { config, messaging, inbound, conversationId, signal } = options;
+
+  let release: () => void;
+  try {
+    release = acquireSingleInstance(`${config.databasePath}.lock`);
+  } catch (error) {
+    if (error instanceof AlreadyRunningError) {
+      console.error(`\n${error.message}`);
+      process.exitCode = 1;
+      return;
+    }
+    throw error;
+  }
+
   const store = openStore(config);
   const agent = buildAgent(config);
   const inbox = new ReplyInbox();
@@ -257,6 +274,7 @@ export async function serve(options: ServeOptions): Promise<void> {
     throw error;
   } finally {
     store.close();
+    release();
   }
 }
 

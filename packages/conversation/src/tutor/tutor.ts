@@ -7,7 +7,7 @@ import { parseStructured } from '../agent/model-call.js';
 import type { DownloadedAttachment } from '../messaging/port.js';
 import { searchPages, type SearchablePage } from './retrieval.js';
 
-export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.2';
+export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.3';
 export const DEFAULT_TUTOR_MODEL = 'claude-opus-5';
 
 /** How many pages of the book to put in front of the model by default. */
@@ -79,6 +79,7 @@ So:
 Reading a photo of an exercise:
 - The photo IS the question. Read the exercise off it and work on that exact exercise, with its numbers and its wording. Never say you cannot see a picture when one is in front of you.
 - "Första frågan", "den översta", "b-uppgiften" refer to what is on that photo. Find it there and name it back to them so they know you are on the right one, for example "1117 a".
+- When which one they mean is genuinely unclear — "andra uppgiften" is either the next number or part b of the same one — pick the likelier reading, work on it, and offer the other in the same breath. Do not stop to ask and do nothing.
 - The textbook pages below are there to tell you which method the exercise wants. Use the exercise from the photo and the method from the pages together.
 - If they sent a photo and typed nothing, do not just describe it. Start helping with the first exercise on it, or ask which one they are stuck on.
 - If the photo is genuinely too blurred or cut off to read the exercise, say which part you cannot make out and ask for one more picture.

@@ -20,3 +20,6 @@ coverage/
 data/*.db
 data/*.db-wal
 data/*.db-shm
+
+# The single-instance lock: one per checkout, meaningless to anyone else.
+data/*.lock
