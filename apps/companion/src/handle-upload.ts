@@ -4,7 +4,9 @@ import type { StudentProfile } from '@math-study-companion/contracts';
 import {
   UnsupportedFileError,
   type AttachmentDownloader,
+  type DocumentKind,
   type DocumentReader,
+  type DownloadedAttachment,
   type InboundAttachment,
 } from '@math-study-companion/conversation';
 
@@ -47,6 +49,16 @@ export interface UploadOutcome {
   result: ApplyResult | null;
   /** Pages this upload added, so the next answer can be grounded in them. */
   savedPages: BookPage[];
+  /**
+   * The file itself, when it was read.
+   *
+   * The extracted text is what makes a page searchable; the picture is what
+   * the student is actually pointing at when they ask "hur löser jag den
+   * första?", so the tutor has to be able to look at it too.
+   */
+  file: DownloadedAttachment | null;
+  /** What the upload turned out to be, when it could be read at all. */
+  kind: DocumentKind | null;
 }
 
 export async function handleUpload(
@@ -60,6 +72,8 @@ export async function handleUpload(
       message: 'Den filen är för stor för mig. Ta en bild av sidan istället.',
       result: null,
       savedPages: [],
+      file: null,
+      kind: null,
     };
   }
 
@@ -71,6 +85,8 @@ export async function handleUpload(
       message: 'Jag kom inte åt filen. Kan du skicka den igen?',
       result: null,
       savedPages: [],
+      file: null,
+      kind: null,
     };
   }
 
@@ -79,7 +95,13 @@ export async function handleUpload(
     reading = await input.reader.read(file);
   } catch (error) {
     if (error instanceof UnsupportedFileError) {
-      return { message: error.message, result: null, savedPages: [] };
+      return {
+        message: error.message,
+        result: null,
+        savedPages: [],
+        file: null,
+        kind: null,
+      };
     }
     throw error;
   }
@@ -124,7 +146,13 @@ export async function handleUpload(
     });
   }
 
-  return { message: result.message, result, savedPages };
+  return {
+    message: result.message,
+    result,
+    savedPages,
+    file,
+    kind: reading.kind,
+  };
 }
 
 export function writeStudyPlan(path: string, items: StudyItem[]): void {

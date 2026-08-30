@@ -2,11 +2,16 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 
+import { toModelContentBlock } from '../agent/attachment-block.js';
 import { parseStructured } from '../agent/model-call.js';
+import type { DownloadedAttachment } from '../messaging/port.js';
 import { searchPages, type SearchablePage } from './retrieval.js';
 
-export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-29.1';
+export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.1';
 export const DEFAULT_TUTOR_MODEL = 'claude-opus-5';
+
+/** How many pages of the book to put in front of the model by default. */
+export const DEFAULT_PAGE_LIMIT = 8;
 
 const tutorOutputSchema = z.object({
   /**
@@ -37,14 +42,25 @@ export interface TutorMessage {
 
 const SYSTEM_PROMPT = `You are Broski, a maths study companion for one Swedish upper-secondary student. They are writing to you about their maths, and you help.
 
-You work from their own textbook and nothing else. Pages from it are given to you below. Those pages are the only source you may use: not your own knowledge of mathematics, not another book's method, not a formula you happen to know.
+You work from their own material and nothing else. Two things count as their material, and only these two:
+- Pages from their textbook, given to you below as text.
+- Photos they sent you, shown to you as pictures. A photo of their book, their worksheet, or their own working is their material, and you read it directly.
+
+Nothing else is: not your own knowledge of mathematics, not another book's method, not a formula you happen to know.
 
 That restriction is the point of you. A student taught one method in class and a different one by you is worse off than one who got no help at all.
 
 So:
-- If the pages cover what they asked, help using the pages' own method and notation. Set covered to true and list the page labels you leaned on.
-- If the pages do not cover it, set covered to false and say plainly that it is not in their book. Do not answer anyway. Do not explain it "generally". Do not guess which chapter it might be in.
-- If the pages cover part of it, help with that part and say which part is missing.
+- If their material covers what they asked, help using its own method and notation. Set covered to true and list the page labels you leaned on.
+- If it does not cover it, set covered to false and say plainly that it is not in their book. Do not answer anyway. Do not explain it "generally". Do not guess which chapter it might be in.
+- If it covers part of it, help with that part and say which part is missing.
+
+Reading a photo of an exercise:
+- The photo IS the question. Read the exercise off it and work on that exact exercise, with its numbers and its wording. Never say you cannot see a picture when one is in front of you.
+- "Första frågan", "den översta", "b-uppgiften" refer to what is on that photo. Find it there and name it back to them so they know you are on the right one, for example "1117 a".
+- The textbook pages below are there to tell you which method the exercise wants. Use the exercise from the photo and the method from the pages together.
+- If they sent a photo and typed nothing, do not just describe it. Start helping with the first exercise on it, or ask which one they are stuck on.
+- If the photo is genuinely too blurred or cut off to read the exercise, say which part you cannot make out and ask for one more picture.
 
 How to help, when you can:
 - Do not simply hand over the answer. Take the next step with them: point at what to do first, ask what they get, and let them try.
@@ -67,9 +83,17 @@ export interface TutorInput {
    * frågan" matches nothing, and the picture is the whole question.
    */
   pinned?: SearchablePage[];
+  /**
+   * The photos themselves, shown to the model as pictures.
+   *
+   * Reading a page into text loses exactly what an exercise is made of:
+   * which number is (a) and which is (b), the fraction bars, the figure. The
+   * text is what finds the right pages; the picture is what gets answered.
+   */
+  files?: DownloadedAttachment[];
   client?: Anthropic;
   model?: string;
-  /** How many pages to put in front of the model. */
+  /** How many pages of the book to put in front of the model. */
   pageLimit?: number;
 }
 
@@ -84,8 +108,10 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
   const client =
     input.client ?? new Anthropic({ maxRetries: 3, timeout: 60_000 });
   const model = input.model ?? process.env['MSC_MODEL'] ?? DEFAULT_TUTOR_MODEL;
+  const pinned = input.pinned ?? [];
+  const files = input.files ?? [];
 
-  if (input.pages.length === 0 && pinnedLength(input) === 0) {
+  if (input.pages.length === 0 && pinned.length === 0 && files.length === 0) {
     return {
       covered: false,
       answer:
@@ -97,24 +123,17 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     };
   }
 
-  // Search on the question plus what was just said, so a follow-up like
-  // "och sen då?" still finds the page the conversation is about.
-  const recent = (input.history ?? [])
-    .slice(-4)
-    .map((entry) => entry.text)
-    .join(' ');
-  const pinned = input.pinned ?? [];
-  const searched = searchPages(
-    input.pages,
-    `${input.question} ${recent}`,
-    input.pageLimit ?? 5,
-  );
-  // Pinned first, then whatever search found that is not already there.
-  const pinnedIds = new Set(pinned.map((page) => page.id));
-  const found = [
-    ...pinned.map((page) => ({ ...page, score: Number.POSITIVE_INFINITY })),
-    ...searched.filter((page) => !pinnedIds.has(page.id)),
-  ];
+  const found = choosePages(input, pinned);
+
+  const content: Anthropic.ContentBlockParam[] = [];
+  if (files.length > 0) {
+    content.push({
+      type: 'text',
+      text: 'What the student photographed. This is the exercise they are asking about — read it here:',
+    });
+    for (const file of files) content.push(toModelContentBlock(file));
+  }
+  content.push({ type: 'text', text: pagesAndConversation(input, found) });
 
   const parsed = await parseStructured<z.infer<typeof tutorOutputSchema>>(
     client,
@@ -127,28 +146,7 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
         effort: 'medium',
         format: zodOutputFormat(tutorOutputSchema),
       },
-      messages: [
-        {
-          role: 'user',
-          content: [
-            "Pages from the student's textbook:",
-            found.length > 0
-              ? found
-                  .map((page) => `--- ${page.label} ---\n${page.text}`)
-                  .join('\n\n')
-              : '(nothing in the book matched this question)',
-            '',
-            'The conversation so far:',
-            (input.history ?? [])
-              .map(
-                (entry) =>
-                  `${entry.role === 'companion' ? 'You' : 'Student'}: ${entry.text}`,
-              )
-              .join('\n'),
-            `Student: ${input.question}`,
-          ].join('\n'),
-        },
-      ],
+      messages: [{ role: 'user', content }],
     },
   );
 
@@ -158,7 +156,9 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
   const usedPages = parsed.usedPages.filter((label) => offered.has(label));
 
   return {
-    covered: parsed.covered && found.length > 0,
+    // A photo of their own book is material too, so a question answered off
+    // the picture alone is still grounded.
+    covered: parsed.covered && (found.length > 0 || files.length > 0),
     answer: parsed.answer.trim(),
     usedPages,
     consideredPages: found.map((page) => page.label),
@@ -167,6 +167,79 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
   };
 }
 
-function pinnedLength(input: TutorInput): number {
-  return input.pinned?.length ?? 0;
+/**
+ * Which pages of the book to put in front of the model.
+ *
+ * Two searches, not one. What the student typed finds pages by name, and for a
+ * question like "hur löser jag första frågan" that is nothing at all. What is
+ * printed on the page they photographed — the exercise wording, the terms, the
+ * numbers — finds the pages that teach it. Neither is allowed to crowd the
+ * other out, so the two rankings are taken in turns.
+ */
+function choosePages(
+  input: TutorInput,
+  pinned: SearchablePage[],
+): SearchablePage[] {
+  const limit = input.pageLimit ?? DEFAULT_PAGE_LIMIT;
+
+  // Search on the question plus what was just said, so a follow-up like
+  // "och sen då?" still finds the page the conversation is about.
+  const recent = (input.history ?? [])
+    .slice(-4)
+    .map((entry) => entry.text)
+    .join(' ');
+  const byQuestion = searchPages(
+    input.pages,
+    `${input.question} ${recent}`,
+    limit,
+  );
+
+  const photographed = pinned
+    .map((page) => `${page.label} ${page.text}`)
+    .join(' ');
+  const byPhoto =
+    photographed.trim() === ''
+      ? []
+      : searchPages(input.pages, photographed, limit);
+
+  const chosen: SearchablePage[] = [];
+  const seen = new Set<string>();
+  for (const page of [...pinned, ...interleave(byQuestion, byPhoto)]) {
+    if (seen.has(page.id)) continue;
+    seen.add(page.id);
+    chosen.push(page);
+    if (chosen.length >= limit + pinned.length) break;
+  }
+  return chosen;
+}
+
+/** Alternates two ranked lists so neither one crowds the other out. */
+function interleave<T>(first: T[], second: T[]): T[] {
+  const merged: T[] = [];
+  for (let i = 0; i < Math.max(first.length, second.length); i += 1) {
+    if (i < first.length) merged.push(first[i]!);
+    if (i < second.length) merged.push(second[i]!);
+  }
+  return merged;
+}
+
+function pagesAndConversation(
+  input: TutorInput,
+  found: SearchablePage[],
+): string {
+  return [
+    "Pages from the student's textbook:",
+    found.length > 0
+      ? found.map((page) => `--- ${page.label} ---\n${page.text}`).join('\n\n')
+      : '(nothing in the book matched this question)',
+    '',
+    'The conversation so far:',
+    (input.history ?? [])
+      .map(
+        (entry) =>
+          `${entry.role === 'companion' ? 'You' : 'Student'}: ${entry.text}`,
+      )
+      .join('\n'),
+    `Student: ${input.question}`,
+  ].join('\n');
 }

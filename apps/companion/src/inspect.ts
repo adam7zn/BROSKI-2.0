@@ -6,6 +6,15 @@ const config = readConfig();
 const store = openStore(config);
 
 try {
+  // What the tutor has to work with. "It only reads three pages" is either a
+  // search that missed or a book that was never fully indexed, and this is how
+  // to tell the two apart.
+  const pages = store.bookPages();
+  console.log(`Book: ${pages.length} page(s) indexed.`);
+  if (pages.length > 0) {
+    console.log(`  ${pages.map((page) => page.label).join(', ')}`);
+  }
+
   const interactions = store.recentInteractions(20);
   if (interactions.length === 0) {
     console.log('No interactions yet.');

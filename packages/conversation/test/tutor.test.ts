@@ -24,18 +24,30 @@ const pages = [
   },
 ];
 
+type ContentBlock = { type: string; text?: string };
+
 function stubClient(
   output: { covered: boolean; answer: string; usedPages: string[] },
-  onPrompt?: (prompt: string) => void,
+  onContent?: (content: ContentBlock[]) => void,
 ) {
   return {
     messages: {
-      parse: async (params: { messages: Array<{ content: string }> }) => {
-        onPrompt?.(String(params.messages[0]?.content ?? ''));
+      parse: async (params: {
+        messages: Array<{ content: ContentBlock[] }>;
+      }) => {
+        onContent?.(params.messages[0]?.content ?? []);
         return { parsed_output: output };
       },
     },
   } as unknown as Anthropic;
+}
+
+/** Everything the model was told in words, as one string. */
+function textOf(content: ContentBlock[]): string {
+  return content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text ?? '')
+    .join('\n');
 }
 
 test('common words do not decide which page is relevant', () => {
@@ -97,7 +109,7 @@ test('only the pages retrieval found are put in front of the model', async () =>
         answer: 'Börja med att halvera p.',
         usedPages: ['s. 84'],
       },
-      (prompt) => prompts.push(prompt),
+      (content) => prompts.push(textOf(content)),
     ),
   });
 
@@ -160,7 +172,7 @@ test('a follow-up finds the page the conversation is about', async () => {
     pages,
     client: stubClient(
       { covered: true, answer: 'Kvadrera det.', usedPages: ['s. 84'] },
-      (prompt) => prompts.push(prompt),
+      (content) => prompts.push(textOf(content)),
     ),
   });
 
@@ -187,7 +199,7 @@ test('a page just photographed is used even when the words match nothing', async
         answer: 'Börja med att multiplicera in x i parentesen.',
         usedPages: ['Uppgifter 1117–1129'],
       },
-      (prompt) => prompts.push(prompt),
+      (content) => prompts.push(textOf(content)),
     ),
   });
 
@@ -212,4 +224,94 @@ test('a photographed page works even with no book indexed at all', async () => {
 
   assert.equal(turn.covered, true);
   assert.match(turn.answer, /trean/);
+});
+
+test('the photo itself is put in front of the model, not only its text', async () => {
+  const blocks: ContentBlock[] = [];
+  const turn = await runTutorTurn({
+    question: 'hur löser jag första frågan',
+    pages,
+    files: [
+      {
+        bytes: new Uint8Array([1, 2, 3]),
+        mimeType: 'image/jpeg',
+        fileName: 'sida.jpg',
+      },
+    ],
+    client: stubClient(
+      { covered: true, answer: '1117 a: multiplicera in x.', usedPages: [] },
+      (content) => blocks.push(...content),
+    ),
+  });
+
+  // Reading the page into text loses which number is (a); the picture does not.
+  assert.ok(blocks.some((block) => block.type === 'image'));
+  assert.equal(turn.covered, true);
+});
+
+test('a photo alone is enough to answer, with no book indexed', async () => {
+  const turn = await runTutorTurn({
+    question: 'hjälp',
+    pages: [],
+    files: [
+      {
+        bytes: new Uint8Array([1]),
+        mimeType: 'image/png',
+        fileName: null,
+      },
+    ],
+    client: stubClient({
+      covered: true,
+      answer: 'Börja med att flytta över trean.',
+      usedPages: [],
+    }),
+  });
+
+  assert.equal(turn.covered, true);
+  assert.doesNotMatch(turn.answer, /ingen bok inlagd/);
+});
+
+test('the book is searched with the words on the page just photographed', async () => {
+  const prompts: string[] = [];
+  await runTutorTurn({
+    // Says nothing at all about which page teaches this.
+    question: 'hjälp mig med den här',
+    pages,
+    pinned: [
+      {
+        id: 'upload:abc',
+        label: 'Uppgift 1117',
+        text: 'Lös ekvationen x^2 - 6x + 8 = 0 med pq-formeln.',
+      },
+    ],
+    client: stubClient(
+      { covered: true, answer: 'Halvera p först.', usedPages: ['s. 84'] },
+      (content) => prompts.push(textOf(content)),
+    ),
+  });
+
+  // The photographed exercise names pq-formeln, so the page that teaches it
+  // has to come along even though the student never typed the word.
+  assert.match(prompts[0]!, /s\. 84/);
+});
+
+test('an unrelated page is still left out when the photo finds pages', async () => {
+  const prompts: string[] = [];
+  await runTutorTurn({
+    question: 'hjälp mig',
+    pages,
+    pinned: [
+      {
+        id: 'upload:abc',
+        label: 'Uppgift 1117',
+        text: 'Lös x^2 - 6x + 8 = 0 med pq-formeln.',
+      },
+    ],
+    client: stubClient(
+      { covered: true, answer: 'Halvera p.', usedPages: ['s. 84'] },
+      (content) => prompts.push(textOf(content)),
+    ),
+  });
+
+  assert.ok(!prompts[0]!.includes('s. 20'));
 });

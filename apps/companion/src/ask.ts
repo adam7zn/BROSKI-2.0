@@ -48,6 +48,11 @@ try {
           ? `        [ur boken: ${turn.usedPages.join(', ') || 'ingen sida angiven'}]`
           : '        [inte i boken]',
       );
+      // Which pages retrieval actually offered, so a wrong answer can be told
+      // apart from a wrong search.
+      console.log(
+        `        [såg på: ${turn.consideredPages.join(', ') || 'inga sidor'}]`,
+      );
     } catch (error) {
       if (error instanceof ModelCallError) {
         console.error(`\n${error.studentMessage}\n(${error.message})`);

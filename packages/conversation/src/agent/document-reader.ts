@@ -3,6 +3,7 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 
 import type { DownloadedAttachment } from '../messaging/port.js';
+import { toModelContentBlock } from './attachment-block.js';
 import { parseStructured } from './model-call.js';
 
 /**
@@ -77,22 +78,6 @@ export interface DocumentReader {
   read(file: DownloadedAttachment): Promise<DocumentReading>;
 }
 
-export class UnsupportedFileError extends Error {
-  constructor(readonly mimeType: string) {
-    super(
-      `I can read photos and PDFs. This was ${mimeType}, which I cannot open.`,
-    );
-    this.name = 'UnsupportedFileError';
-  }
-}
-
-const IMAGE_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-]);
-
 const SYSTEM_PROMPT = `You read a photo or file a Swedish upper-secondary student sent to their maths study companion. It is usually a term plan from school, a timetable, an assignment sheet, or a page from the textbook.
 
 Your job is to write down what is actually on it. You are not tutoring here and not summarising loosely: another program will act on what you return.
@@ -135,7 +120,7 @@ export class ClaudeDocumentReader implements DocumentReader {
   }
 
   async read(file: DownloadedAttachment): Promise<DocumentReading> {
-    const source = toContentBlock(file);
+    const source = toModelContentBlock(file);
     const today = new Date().toISOString().slice(0, 10);
 
     return parseStructured<DocumentReading>(this.#client, 'readDocument', {
@@ -161,31 +146,4 @@ export class ClaudeDocumentReader implements DocumentReader {
       ],
     });
   }
-}
-
-function toContentBlock(
-  file: DownloadedAttachment,
-): Anthropic.ContentBlockParam {
-  const data = Buffer.from(file.bytes).toString('base64');
-
-  if (IMAGE_TYPES.has(file.mimeType)) {
-    return {
-      type: 'image',
-      source: {
-        type: 'base64',
-        media_type: file.mimeType as
-          'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-        data,
-      },
-    };
-  }
-
-  if (file.mimeType === 'application/pdf') {
-    return {
-      type: 'document',
-      source: { type: 'base64', media_type: 'application/pdf', data },
-    };
-  }
-
-  throw new UnsupportedFileError(file.mimeType);
 }

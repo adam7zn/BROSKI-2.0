@@ -24,6 +24,7 @@ export * from './session.js';
 export * from './agent/types.js';
 export * from './agent/answer-check.js';
 export * from './agent/claude-agent.js';
+export * from './agent/attachment-block.js';
 export * from './agent/document-reader.js';
 export * from './agent/scripted-document-reader.js';
 export * from './agent/scripted-agent.js';

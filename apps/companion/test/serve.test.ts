@@ -4,7 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, test } from 'node:test';
 
-import { FakeMessagingProvider } from '@math-study-companion/conversation';
+import {
+  FakeMessagingProvider,
+  ScriptedDocumentReader,
+} from '@math-study-companion/conversation';
 
 import { readConfig } from '../src/config.js';
 import { InteractionStore } from '../src/local-store.js';
@@ -106,4 +109,88 @@ test('a message gets an answer, without a model key', async () => {
   const replies = messaging.sent.map((sent) => sent.text);
   assert.ok(replies.length > 0, 'the companion said nothing at all');
   assert.match(replies.at(-1)!, /ingen bok inlagd/);
+});
+
+/** Hands back the same photo for any attachment, with no network involved. */
+const photoDownloader = {
+  async downloadAttachment() {
+    return {
+      bytes: new Uint8Array([137, 80, 78, 71]),
+      mimeType: 'image/png',
+      fileName: 'sida.png',
+    };
+  },
+};
+
+/** A tutor that answers without a model, and records what it was shown. */
+function stubTutor(answer: string, seen: { blocks: unknown[] }) {
+  return {
+    messages: {
+      parse: async (params: { messages: Array<{ content: unknown[] }> }) => {
+        seen.blocks.push(...(params.messages[0]?.content ?? []));
+        return {
+          parsed_output: { covered: true, answer, usedPages: [] },
+        };
+      },
+    },
+  } as unknown as NonNullable<Parameters<typeof serve>[0]['tutorClient']>;
+}
+
+test('a photo of maths with no caption is helped with, not just filed', async () => {
+  const config = configFor('photo');
+  profileFor(config.databasePath);
+
+  const messaging = new FakeMessagingProvider();
+  const controller = new AbortController();
+  const seen = { blocks: [] as unknown[] };
+
+  const running = serve({
+    config,
+    messaging,
+    inbound: messaging,
+    downloader: photoDownloader,
+    reader: new ScriptedDocumentReader({
+      kind: 'material',
+      summary: 'Uppgifter 1117-1129',
+      courseName: null,
+      rows: [],
+      extractedText: '1117 a) x(x - 3)  b) x^3(2 - 3x)',
+      confidence: 0.9,
+    }),
+    tutorClient: stubTutor(
+      'Börja med att multiplicera in x i parentesen.',
+      seen,
+    ),
+    conversationId: 'chat-1',
+    signal: controller.signal,
+    stopAfterOne: false,
+    force: false,
+  });
+
+  await sleep(20);
+  messaging.deliver('chat-1', '', [
+    {
+      kind: 'photo',
+      providerFileId: 'file-1',
+      fileName: 'sida.png',
+      mimeType: 'image/png',
+      sizeBytes: 4,
+    },
+  ]);
+  await sleep(80);
+  controller.abort();
+  await running;
+
+  // Showing it a page of exercises is asking about them. A receipt saying the
+  // page was saved is not an answer.
+  const replies = messaging.sent.map((sent) => sent.text);
+  assert.ok(
+    replies.some((text) => text.includes('multiplicera in x')),
+    `expected help with the page, got: ${JSON.stringify(replies)}`,
+  );
+  assert.ok(!replies.some((text) => text.startsWith('Sparat:')));
+  // And the picture itself went to the tutor, not only the text read off it.
+  assert.ok(
+    seen.blocks.some((block) => (block as { type?: string }).type === 'image'),
+  );
 });
