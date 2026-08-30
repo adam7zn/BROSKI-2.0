@@ -190,6 +190,29 @@ export class HostedMessagingService {
     return session;
   }
 
+  async stopInteraction(
+    interactionId: string,
+    traceId: string,
+  ): Promise<MessagingSession> {
+    const session = await this.options.repository.findSession(interactionId);
+    if (!session) {
+      throw new AppError(404, {
+        code: 'MESSAGING_SESSION_NOT_FOUND',
+        message: `Messaging session ${interactionId} was not found`,
+        retryable: false,
+        traceId,
+      });
+    }
+    if (session.status === 'active') {
+      await this.options.repository.stopSession({
+        interactionId,
+        status: 'stopped',
+        now: this.#now().toISOString(),
+      });
+    }
+    return { ...session, status: 'stopped', updatedAt: this.#now().toISOString() };
+  }
+
   async ingestWebhook(
     payload: unknown,
     suppliedSecret: string | undefined,

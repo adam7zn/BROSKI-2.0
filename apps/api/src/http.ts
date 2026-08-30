@@ -316,6 +316,36 @@ export function createDemoHttpServer(options: DemoHttpServerOptions): Server {
       const messagingMatch = path.match(
         /^\/internal\/demo\/([^/]+)\/messaging$/,
       );
+      const messagingStopMatch = path.match(
+        /^\/internal\/demo\/([^/]+)\/messaging\/stop$/,
+      );
+      if (method === 'POST' && messagingStopMatch?.[1]) {
+        if (!options.messaging) {
+          throw new AppError(503, {
+            code: 'HOSTED_MESSAGING_NOT_CONFIGURED',
+            message: 'Hosted messaging is not configured',
+            retryable: false,
+            traceId: requestTraceId,
+          });
+        }
+        interactionId = decodeURIComponent(messagingStopMatch[1]);
+        const session = await options.messaging.stopInteraction(
+          interactionId,
+          requestTraceId,
+        );
+        respond(response, 200, session, requestTraceId);
+        log(
+          logger,
+          'info',
+          'messaging.session_stopped',
+          requestTraceId,
+          method,
+          path,
+          200,
+          interactionId,
+        );
+        return;
+      }
       if (method === 'GET' && messagingMatch?.[1]) {
         if (!options.messaging) {
           throw new AppError(503, {
