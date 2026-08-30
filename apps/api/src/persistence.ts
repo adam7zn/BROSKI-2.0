@@ -1,4 +1,12 @@
-import { PostgresInteractionRepository } from '@math-study-companion/database';
+import {
+  DeterministicDemoAgent,
+  SendblueMessagingProvider,
+  type ConversationAgent,
+} from '@math-study-companion/conversation';
+import {
+  PostgresHostedMessagingRepository,
+  PostgresInteractionRepository,
+} from '@math-study-companion/database';
 import { Pool } from 'pg';
 
 import { createDemoApp, type CreateDemoAppOptions } from './app.js';
@@ -12,14 +20,23 @@ export type DemoPersistence = 'memory' | 'postgresql';
 export interface PersistenceEnvironment {
   DATABASE_URL?: string;
   DEMO_REPOSITORY?: string;
+  INTERNAL_API_TOKEN?: string;
+  MESSAGING_LIVE_ENABLED?: string;
+  SENDBLUE_API_BASE_URL?: string;
+  SENDBLUE_API_KEY_ID?: string;
+  SENDBLUE_API_SECRET_KEY?: string;
+  SENDBLUE_FROM_NUMBER?: string;
+  SENDBLUE_RECIPIENT_NUMBER?: string;
+  SENDBLUE_WEBHOOK_SECRET?: string;
 }
 
 export interface CreateConfiguredDemoAppOptions extends Omit<
   CreateDemoAppOptions,
-  'repository' | 'logger'
+  'repository' | 'logger' | 'messaging'
 > {
   environment?: PersistenceEnvironment;
   logger?: Logger;
+  conversationAgent?: ConversationAgent;
 }
 
 export async function createConfiguredDemoApp(
@@ -28,20 +45,41 @@ export async function createConfiguredDemoApp(
   const {
     environment = process.env,
     logger = jsonLogger,
+    conversationAgent = new DeterministicDemoAgent(),
     ...appOptions
   } = options;
   const persistence = selectPersistence(environment);
+  const internalApiToken = requiredEnvironmentValue(
+    environment,
+    'INTERNAL_API_TOKEN',
+    'configured API runtime',
+  );
+  const liveEnabled = parseBoolean(
+    environment.MESSAGING_LIVE_ENABLED,
+    'MESSAGING_LIVE_ENABLED',
+  );
+  if (liveEnabled && !hasHostedMessagingEnvironment(environment)) {
+    throw new Error(
+      'MESSAGING_LIVE_ENABLED=true requires hosted Sendblue messaging configuration',
+    );
+  }
 
   if (persistence === 'memory') {
+    if (hasHostedMessagingEnvironment(environment)) {
+      throw new Error(
+        'Hosted Sendblue messaging requires PostgreSQL persistence',
+      );
+    }
     const app = await createDemoApp({
       ...appOptions,
       logger,
       repository: new InMemoryDemoInteractionRepository(),
+      internalApiToken,
     });
     return {
       ...app,
       persistence,
-      close: async () => {},
+      close: async () => app.messagingWorker?.stop(),
     };
   }
 
@@ -64,10 +102,53 @@ export async function createConfiguredDemoApp(
   try {
     await pool.query('SELECT mode, reason FROM interactions LIMIT 0');
     await pool.query('SELECT profile_id FROM demo_profiles LIMIT 0');
+    const messagingConfiguration = hostedMessagingConfiguration(
+      environment,
+      internalApiToken,
+    );
+    if (messagingConfiguration) {
+      await pool.query(
+        'SELECT interaction_id FROM demo_messaging_sessions LIMIT 0',
+      );
+      await pool.query(
+        'SELECT provider_event_id FROM demo_inbound_messages LIMIT 0',
+      );
+      await pool.query(
+        'SELECT idempotency_key FROM demo_outbound_outbox LIMIT 0',
+      );
+    }
     const repository = new PostgresDemoInteractionRepositoryAdapter(
       new PostgresInteractionRepository(pool),
     );
-    const app = await createDemoApp({ ...appOptions, logger, repository });
+    const app = await createDemoApp({
+      ...appOptions,
+      logger,
+      repository,
+      ...(messagingConfiguration
+        ? { internalApiToken: messagingConfiguration.internalApiToken }
+        : { internalApiToken }),
+      ...(messagingConfiguration === null
+        ? {}
+        : {
+            messaging: {
+              repository: new PostgresHostedMessagingRepository(pool),
+              provider: new SendblueMessagingProvider({
+                apiBaseUrl: messagingConfiguration.apiBaseUrl,
+                apiKeyId: messagingConfiguration.apiKeyId,
+                apiSecretKey: messagingConfiguration.apiSecretKey,
+                fromNumber: messagingConfiguration.fromNumber,
+                recipientNumber: messagingConfiguration.recipientNumber,
+                liveEnabled: messagingConfiguration.liveEnabled,
+              }),
+              agent: conversationAgent,
+              webhookSecret: messagingConfiguration.webhookSecret,
+              participantAddress: messagingConfiguration.recipientNumber,
+              providerLine: messagingConfiguration.fromNumber,
+              liveEnabled: messagingConfiguration.liveEnabled,
+              logger,
+            },
+          }),
+    });
     let closed = false;
 
     return {
@@ -76,6 +157,7 @@ export async function createConfiguredDemoApp(
       close: async () => {
         if (closed) return;
         closed = true;
+        await app.messagingWorker?.stop();
         await pool.end();
       },
     };
@@ -94,4 +176,68 @@ function selectPersistence(
     throw new Error('DEMO_REPOSITORY must be memory or postgresql');
   }
   return environment.DATABASE_URL ? 'postgresql' : 'memory';
+}
+
+interface HostedMessagingConfiguration {
+  apiBaseUrl: string;
+  apiKeyId: string;
+  apiSecretKey: string;
+  fromNumber: string;
+  recipientNumber: string;
+  webhookSecret: string;
+  liveEnabled: boolean;
+  internalApiToken: string;
+}
+
+function hasHostedMessagingEnvironment(
+  environment: PersistenceEnvironment,
+): boolean {
+  return [
+    environment.SENDBLUE_API_BASE_URL,
+    environment.SENDBLUE_API_KEY_ID,
+    environment.SENDBLUE_API_SECRET_KEY,
+    environment.SENDBLUE_FROM_NUMBER,
+    environment.SENDBLUE_RECIPIENT_NUMBER,
+    environment.SENDBLUE_WEBHOOK_SECRET,
+  ].some((value) => value !== undefined);
+}
+
+function hostedMessagingConfiguration(
+  environment: PersistenceEnvironment,
+  internalApiToken: string,
+): HostedMessagingConfiguration | null {
+  if (!hasHostedMessagingEnvironment(environment)) {
+    return null;
+  }
+  const required = (name: keyof PersistenceEnvironment): string =>
+    requiredEnvironmentValue(environment, name, 'hosted messaging');
+  return {
+    apiBaseUrl: required('SENDBLUE_API_BASE_URL'),
+    apiKeyId: required('SENDBLUE_API_KEY_ID'),
+    apiSecretKey: required('SENDBLUE_API_SECRET_KEY'),
+    fromNumber: required('SENDBLUE_FROM_NUMBER'),
+    recipientNumber: required('SENDBLUE_RECIPIENT_NUMBER'),
+    webhookSecret: required('SENDBLUE_WEBHOOK_SECRET'),
+    internalApiToken,
+    liveEnabled: parseBoolean(
+      environment.MESSAGING_LIVE_ENABLED,
+      'MESSAGING_LIVE_ENABLED',
+    ),
+  };
+}
+
+function requiredEnvironmentValue(
+  environment: PersistenceEnvironment,
+  name: keyof PersistenceEnvironment,
+  purpose: string,
+): string {
+  const value = environment[name]?.trim();
+  if (!value) throw new Error(`${name} is required for ${purpose}`);
+  return value;
+}
+
+function parseBoolean(value: string | undefined, name: string): boolean {
+  if (value === undefined || value === 'false') return false;
+  if (value === 'true') return true;
+  throw new Error(`${name} must be true or false`);
 }

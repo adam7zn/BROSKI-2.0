@@ -22,6 +22,7 @@ async function main(): Promise<void> {
 
   try {
     await listen(runtime.server, port, host);
+    runtime.messagingWorker?.start();
   } catch (error) {
     await runtime.close();
     throw error;

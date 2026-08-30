@@ -8,6 +8,7 @@ import type {
 } from './domain.js';
 
 const baseUrl = apiBaseUrl(process.env.API_BASE_URL);
+const internalApiToken = requiredEnvironment('INTERNAL_API_TOKEN');
 const [context, result] = await Promise.all([
   loadFixture<BackendContext>('backend-to-conversation.json'),
   loadFixture<ConversationResult>('conversation-to-backend.json'),
@@ -52,7 +53,11 @@ async function requestJson(
   path: string,
   init?: RequestInit,
 ): Promise<{ status: number; body: unknown }> {
-  const response = await fetch(`${baseUrl}${path}`, init);
+  const headers = new Headers(init?.headers);
+  if (path.startsWith('/internal/')) {
+    headers.set('authorization', `Bearer ${internalApiToken}`);
+  }
+  const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
   const body = (await response.json()) as unknown;
 
   if (!response.ok) {
@@ -66,6 +71,12 @@ async function requestJson(
   }
 
   return { status: response.status, body };
+}
+
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) throw new Error(`${name} is required`);
+  return value;
 }
 
 async function loadFixture<T>(name: string): Promise<T> {

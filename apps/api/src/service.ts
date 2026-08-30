@@ -191,6 +191,10 @@ export class DemoService {
     });
   }
 
+  async findProfile(): Promise<StoredDemoProfile | null> {
+    return this.#repository.findProfile();
+  }
+
   async reserveOutbound(
     interactionId: string,
     payload: unknown,

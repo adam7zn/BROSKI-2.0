@@ -16,7 +16,19 @@ export {
   type StoredDemoProfileRecord,
   type StoredInteraction,
 } from './interaction-repository.js';
-export { runMigrations } from './migration-runner.js';
+export {
+  inspectMigrationLedger,
+  runMigrations,
+  type MigrationLedgerState,
+  type MigrationLedgerStatus,
+} from './migration-runner.js';
+export {
+  PostgresHostedMessagingRepository,
+  type HostedInboundMessageRecord,
+  type HostedMessagingSessionRecord,
+  type HostedOutboundRecord,
+  type NewHostedOutboundRecord,
+} from './hosted-messaging-repository.js';
 export {
   clearJudgeDemoFixture,
   type ClearedJudgeDemoFixture,

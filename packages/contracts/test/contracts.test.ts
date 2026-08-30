@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   backendToConversationSchema,
+  conversationAgentOutputSchema,
   conversationToBackendSchema,
   demoMessageEventInputSchema,
   demoOutboundReservationInputSchema,
@@ -96,6 +97,48 @@ describe('judge MVP contracts', () => {
         providerMessageId: null,
         idempotencyKey: null,
         occurredAt: '2026-08-29T08:00:00.000Z',
+      }).success,
+    ).toBe(false);
+    expect(
+      demoMessageEventInputSchema.safeParse({
+        provider: 'sendblue',
+        direction: 'outbound',
+        eventType: 'delivered',
+        providerEventId: 'handle-1:DELIVERED',
+        providerMessageId: 'handle-1',
+        idempotencyKey: 'demo-001:turn:0:intent:00',
+        occurredAt: '2026-08-29T08:00:00.000Z',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('validates agent output and HTTPS-only media intents', () => {
+    const output = {
+      outbound: [
+        {
+          purpose: 'question',
+          text: 'Solve 2x + 3 = 11.',
+          mediaUrl: null,
+        },
+      ],
+      agentState: { step: 'answer' },
+      profile: null,
+      result: null,
+      status: 'waiting',
+    };
+    expect(conversationAgentOutputSchema.safeParse(output).success).toBe(true);
+    expect(
+      conversationAgentOutputSchema.safeParse({
+        ...output,
+        outbound: [
+          { purpose: 'image', text: null, mediaUrl: 'file:///tmp/private.png' },
+        ],
+      }).success,
+    ).toBe(false);
+    expect(
+      conversationAgentOutputSchema.safeParse({
+        ...output,
+        outbound: [{ purpose: 'empty', text: null, mediaUrl: null }],
       }).success,
     ).toBe(false);
   });

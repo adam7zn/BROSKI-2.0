@@ -1,3 +1,8 @@
+import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import type {
   BackendToConversation,
   ConversationToBackend,
@@ -10,8 +15,10 @@ import {
   InteractionAlreadyCompletedError,
   InteractionIdMismatchError,
   InteractionNotFoundError,
+  PostgresHostedMessagingRepository,
   PostgresInteractionRepository,
   clearJudgeDemoFixture,
+  inspectMigrationLedger,
   runMigrations,
 } from '../src/index.js';
 
@@ -39,10 +46,14 @@ const result: ConversationToBackend = {
 };
 
 const completedAt = new Date('2026-08-28T12:34:56.000Z');
+const migrationsDirectory = fileURLToPath(
+  new URL('../migrations', import.meta.url),
+);
 
 describe('PostgresInteractionRepository', () => {
   const pool = new Pool({ connectionString });
   const repository = new PostgresInteractionRepository(pool);
+  const messaging = new PostgresHostedMessagingRepository(pool);
 
   beforeAll(async () => {
     await runMigrations(pool);
@@ -250,6 +261,198 @@ describe('PostgresInteractionRepository', () => {
     ).resolves.toHaveLength(1);
   });
 
+  it('durably deduplicates and transactionally claims hosted inbox/outbox rows', async () => {
+    await repository.start(context, { traceId: 'hosted-trace' });
+    const createdAt = '2026-08-29T12:00:00.000Z';
+    await expect(
+      messaging.createSession(
+        {
+          interactionId: 'demo-001',
+          provider: 'sendblue',
+          participantAddress: '+46700000000',
+          providerLine: '+13470000000',
+          status: 'active',
+          turnNumber: 0,
+          agentState: { step: 'course' },
+          lastPromptAt: null,
+          traceId: 'hosted-trace',
+          failureCode: null,
+          createdAt,
+          updatedAt: createdAt,
+        },
+        [
+          {
+            interactionId: 'demo-001',
+            idempotencyKey: 'demo-001:turn:0:00:onboarding-course',
+            turnNumber: 0,
+            purpose: 'onboarding-course',
+            content: 'Which maths course are you taking?',
+            mediaUrl: null,
+            traceId: 'hosted-trace',
+            createdAt,
+          },
+        ],
+      ),
+    ).resolves.toBe('created');
+
+    const competingWorker = new PostgresHostedMessagingRepository(pool);
+    const outboundClaims = await Promise.all([
+      messaging.claimOutbound({
+        now: createdAt,
+        staleBefore: '2026-08-29T11:59:00.000Z',
+      }),
+      competingWorker.claimOutbound({
+        now: createdAt,
+        staleBefore: '2026-08-29T11:59:00.000Z',
+      }),
+    ]);
+    expect(outboundClaims.filter((claim) => claim !== null)).toHaveLength(1);
+    const outbound = outboundClaims.find((claim) => claim !== null)!;
+    expect(outbound?.attemptCount).toBe(1);
+    await messaging.markOutboundAccepted({
+      message: outbound!,
+      providerMessageId: 'sendblue-out-1',
+      acceptedAt: createdAt,
+      event: {
+        provider: 'sendblue',
+        direction: 'outbound',
+        eventType: 'accepted',
+        providerEventId: 'sendblue-out-1',
+        providerMessageId: 'sendblue-out-1',
+        idempotencyKey: outbound!.idempotencyKey,
+        occurredAt: createdAt,
+      },
+      now: createdAt,
+    });
+
+    const message = {
+      provider: 'sendblue',
+      providerEventId: 'sendblue-in-1',
+      providerMessageId: 'sendblue-in-1',
+      interactionId: 'demo-001',
+      turnNumber: 0,
+      senderAddress: '+46700000000',
+      content: 'Mathematics 3c',
+      receivedAt: '2026-08-29T12:00:01.000Z',
+      processingStatus: 'pending' as const,
+      attemptCount: 0,
+      errorCode: null,
+      traceId: 'hosted-trace',
+      createdAt: '2026-08-29T12:00:01.000Z',
+      updatedAt: '2026-08-29T12:00:01.000Z',
+      processedAt: null,
+    };
+    const inboundEvent = {
+      provider: 'sendblue',
+      direction: 'inbound' as const,
+      eventType: 'received' as const,
+      providerEventId: 'sendblue-in-1',
+      providerMessageId: 'sendblue-in-1',
+      idempotencyKey: null,
+      occurredAt: '2026-08-29T12:00:01.000Z',
+    };
+    const outcomes = await Promise.all([
+      messaging.enqueueInbound({ message, event: inboundEvent }),
+      messaging.enqueueInbound({ message, event: inboundEvent }),
+    ]);
+    expect(outcomes.sort()).toEqual(['duplicate', 'queued']);
+
+    const restarted = new PostgresHostedMessagingRepository(pool);
+    await expect(restarted.findSession('demo-001')).resolves.toMatchObject({
+      lastPromptAt: createdAt,
+      status: 'active',
+    });
+    const claimed = await restarted.claimInbound({
+      now: '2026-08-29T12:00:02.000Z',
+      staleBefore: '2026-08-29T12:00:00.000Z',
+    });
+    expect(claimed).toMatchObject({
+      providerEventId: 'sendblue-in-1',
+      processingStatus: 'processing',
+      attemptCount: 1,
+    });
+    await expect(
+      restarted.claimInbound({
+        now: '2026-08-29T12:00:02.000Z',
+        staleBefore: '2026-08-29T12:00:00.000Z',
+      }),
+    ).resolves.toBeNull();
+    const reclaimed = await new PostgresHostedMessagingRepository(
+      pool,
+    ).claimInbound({
+      now: '2026-08-29T12:04:00.000Z',
+      staleBefore: '2026-08-29T12:03:00.000Z',
+    });
+    expect(reclaimed).toMatchObject({
+      providerEventId: 'sendblue-in-1',
+      processingStatus: 'processing',
+      attemptCount: 2,
+    });
+
+    const completion = {
+      outbound: [
+        {
+          purpose: 'feedback',
+          text: result.feedback,
+          mediaUrl: null,
+        },
+      ],
+      agentState: { step: 'complete' },
+      profile: null,
+      result,
+      status: 'completed' as const,
+    };
+    const feedback = {
+      interactionId: 'demo-001',
+      idempotencyKey: 'demo-001:turn:1:intent:00',
+      turnNumber: 1,
+      purpose: 'feedback',
+      content: result.feedback,
+      mediaUrl: null,
+      traceId: 'hosted-trace',
+      createdAt: '2026-08-29T12:04:01.000Z',
+    };
+    await expect(
+      restarted.completeInbound({
+        message: reclaimed!,
+        output: completion,
+        outbounds: [feedback],
+        now: feedback.createdAt,
+      }),
+    ).resolves.toBe('completed');
+    await expect(
+      repository.getByInteractionId('demo-001'),
+    ).resolves.toMatchObject({
+      ...result,
+      completedAt: new Date(feedback.createdAt),
+    });
+    await expect(restarted.findSession('demo-001')).resolves.toMatchObject({
+      status: 'completed',
+      turnNumber: 1,
+      agentState: { step: 'complete' },
+    });
+    await expect(restarted.listOutbox('demo-001')).resolves.toEqual([
+      expect.objectContaining({
+        idempotencyKey: 'demo-001:turn:0:00:onboarding-course',
+        deliveryStatus: 'accepted',
+      }),
+      expect.objectContaining({
+        idempotencyKey: feedback.idempotencyKey,
+        deliveryStatus: 'pending',
+        content: result.feedback,
+      }),
+    ]);
+    await expect(
+      competingWorker.completeInbound({
+        message: reclaimed!,
+        output: completion,
+        outbounds: [feedback],
+        now: '2026-08-29T12:05:00.000Z',
+      }),
+    ).resolves.toBe('lost_claim');
+    await expect(restarted.listOutbox('demo-001')).resolves.toHaveLength(2);
+  });
+
   it('clears only the guarded synthetic fixture', async () => {
     await expect(clearJudgeDemoFixture(pool, 'wrong')).rejects.toThrow(
       /--confirm demo-001/,
@@ -272,5 +475,62 @@ describe('PostgresInteractionRepository', () => {
     await expect(
       repository.getByInteractionId('demo-001'),
     ).rejects.toBeInstanceOf(InteractionNotFoundError);
+  });
+});
+
+describe('migration ledger reconciliation', () => {
+  it('accepts the legacy completed-at filename and applies only forward local migrations', async () => {
+    const admin = new Pool({ connectionString });
+    const schema = `migration_legacy_${crypto.randomUUID().replaceAll('-', '')}`;
+    const legacyDirectory = await mkdtemp(
+      join(tmpdir(), 'msc-legacy-migrations-'),
+    );
+    await copyFile(
+      join(migrationsDirectory, '0001_create_interactions.sql'),
+      join(legacyDirectory, '0001_create_interactions.sql'),
+    );
+    await copyFile(
+      join(migrationsDirectory, '0003_add_completed_at.sql'),
+      join(legacyDirectory, '0002_add_completed_at.sql'),
+    );
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    const isolated = new Pool({
+      connectionString,
+      options: `-c search_path=${schema}`,
+    });
+
+    try {
+      await runMigrations(isolated, legacyDirectory);
+      const before = await inspectMigrationLedger(
+        isolated,
+        migrationsDirectory,
+      );
+      expect(before).toContainEqual({
+        name: '0002_add_completed_at.sql',
+        state: 'applied_alias',
+        equivalentLocalName: '0003_add_completed_at.sql',
+      });
+      expect(before).toContainEqual({
+        name: '0003_add_completed_at.sql',
+        state: 'pending',
+      });
+
+      await runMigrations(isolated, migrationsDirectory);
+      const after = await inspectMigrationLedger(isolated, migrationsDirectory);
+      expect(after.some(({ state }) => state === 'pending')).toBe(false);
+      expect(after.some(({ state }) => state === 'checksum_mismatch')).toBe(
+        false,
+      );
+      expect(after).toContainEqual({
+        name: '0002_add_completed_at.sql',
+        state: 'applied_alias',
+        equivalentLocalName: '0003_add_completed_at.sql',
+      });
+    } finally {
+      await isolated.end();
+      await admin.query(`DROP SCHEMA ${schema} CASCADE`);
+      await admin.end();
+      await rm(legacyDirectory, { recursive: true, force: true });
+    }
   });
 });

@@ -132,8 +132,9 @@ only PostgreSQL is authoritative. See ADR-014.
 
 ## Current milestone
 
-The Platform Phase 1 loop is persisted in Supabase. The active judge MVP connects that same
-canonical interaction to one real iMessage conversation:
+The Platform Phase 1 loop is persisted in PostgreSQL. The active judge MVP connects that same
+canonical interaction to one hosted Sendblue iMessage conversation while retaining the local
+iMessage and Telegram runners:
 
 ```text
 backend context
@@ -158,6 +159,7 @@ The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
 | Typecheck | `pnpm typecheck` |
 | Start the local test PostgreSQL | `pnpm db:up` |
 | Apply migrations locally | `pnpm db:migrate` |
+| Inspect the local migration ledger | `pnpm db:migration-status` |
 | Run all tests (PostgreSQL must be running) | `pnpm test` |
 | Run every required check | `pnpm check` |
 | Build the API | `pnpm --filter @math-study-companion/api build` |
@@ -167,10 +169,12 @@ The repository uses Node.js 22 or newer and pnpm. From a clean checkout:
 | Start local review API | `ADMIN_TOKEN=<local-token> pnpm review-api:dev` |
 | Start local review UI | `pnpm admin:dev` |
 | Apply migrations to Supabase | `pnpm db:migrate:supabase` |
+| Inspect Supabase migration state (read-only) | `pnpm db:migration-status:supabase` |
 | Start the API with Supabase | `pnpm api:start:supabase` |
 | Run the canonical hosted demo | `pnpm demo:supabase` |
 | Clear only the local synthetic fixture | `pnpm demo:clear:local -- --confirm demo-001` |
 | Run the real iMessage demo | `caffeinate -i pnpm demo:imessage` |
+| Queue the hosted Sendblue demo | `pnpm demo:sendblue` |
 
 The hosted project is `Math Study Companion` (`leknhhxqqehwiaxvzwnt`) in `eu-west-1`. Deployments
 provide its complete `DATABASE_URL` as a secret. For local use, either copy `.env.example` to the
@@ -221,3 +225,39 @@ curl -s http://127.0.0.1:3000/internal/demo/profile | jq
 cleanup command is deliberately local-only: it refuses non-local database hosts and accepts only
 `demo-001`. Hosted Supabase is never reset, truncated, or used as a test fixture. The live demo is
 manual and single-user; CI uses the fake provider.
+
+## Hosted Sendblue judge demo
+
+The hosted runtime is one Render Node web service: API, authenticated Sendblue webhook, and durable
+inbox/outbox worker. Copy `.env.sendblue.example` to
+`apps/companion/.env.sendblue.local` only for local development; configure production secrets in
+Render. Keep `MESSAGING_LIVE_ENABLED=false` until migrations, health, authentication, and fake tests
+pass.
+
+Every `/internal/*` call must use `INTERNAL_API_TOKEN` as a bearer token.
+`GET /internal/messaging/status` reports the kill-switch state without secrets, and
+`GET /internal/messaging/status?verifyProvider=true` performs a read-only Sendblue lookup so the
+operator can confirm `iMessage` before enabling live delivery.
+
+Sendblue cannot disable SMS fallback at the account level. Before every live outbound request the
+adapter calls Sendblue's service lookup and proceeds only when it reports `iMessage`; response and
+webhook downgrade checks then stop the session if Sendblue still reports a fallback.
+
+After deploying `render.yaml`, configure Sendblue `receive` and `outbound` webhooks to
+`https://<render-host>/webhooks/messaging/sendblue` using the same secret stored as
+`SENDBLUE_WEBHOOK_SECRET`. The operator command starts a fresh interaction and launches its first
+validated agent intent:
+
+```bash
+MSC_API_URL=https://<render-host> INTERNAL_API_TOKEN=<token> pnpm demo:sendblue
+```
+
+For the controlled phone test, enable `MESSAGING_LIVE_ENABLED=true`, launch one interaction, reply
+from only the configured recipient, verify delivery remains iMessage, replay the webhook to prove
+deduplication, and inspect the authenticated interaction/events/messaging routes. Disable live
+messaging immediately afterward. Automated tests never call Sendblue, Render, or hosted Supabase.
+
+`render.yaml` has a migration pre-deploy command. Therefore the service must not be deployed until
+the read-only local-versus-hosted ledger report has been reviewed and the exact pending forward
+migrations have explicit approval. Likewise, changing `MESSAGING_LIVE_ENABLED` to `true` and running
+the operator command are separate approval-gated actions.

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "demo:imessage": "tsx src/imessage-demo.ts",
+    "demo:sendblue": "tsx src/sendblue-demo.ts",
     "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "plan": "node --disable-warning=ExperimentalWarning --import tsx src/plan.ts",

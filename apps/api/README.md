@@ -7,9 +7,9 @@ first real-message judge demonstration:
 manual start -> profile and delivery metadata -> canonical result -> saved interaction
 ```
 
-The iMessage process remains in `apps/companion`; route and application logic still depend only on
-repository ports. There is no webhook, Canvas integration, scheduler, authentication system,
-generated image, or model-backed agent.
+The hosted Sendblue process runs in this service behind provider and agent ports. Sendblue webhooks
+are authenticated separately, every configured runtime requires a bearer token for `/internal/*`,
+and PostgreSQL persists session, inbox, and outbox state before asynchronous work.
 
 ## Run with Supabase
 
@@ -20,6 +20,7 @@ pnpm install
 pnpm --filter @math-study-companion/api build
 cp .env.example .env.supabase
 # Replace the DATABASE_URL password placeholder, or use the configured macOS Keychain item.
+pnpm db:migration-status:supabase
 pnpm db:migrate:supabase
 pnpm api:start:supabase
 ```
@@ -29,6 +30,15 @@ When `DATABASE_URL` is present, startup requires a reachable, migrated PostgreSQ
 does not fall back silently. Without `DATABASE_URL`, the API uses memory. Set
 `DEMO_REPOSITORY=memory` to request the disposable in-memory adapter explicitly, including when a
 database URL is present.
+
+The configured runtime always requires a non-empty `INTERNAL_API_TOKEN`, including when memory is
+explicitly selected for a local rehearsal. Tests that construct `createDemoApp` directly may inject
+their own authentication boundary.
+
+When any Sendblue setting is present, startup requires all hosted messaging secrets, PostgreSQL,
+and migration `0009`. Live delivery defaults off. The public routes are `GET /health` and the
+secret-authenticated `POST /webhooks/messaging/sendblue`; every `/internal/*` request must send
+`Authorization: Bearer <INTERNAL_API_TOKEN>`.
 
 The hosted API uses Supabase as PostgreSQL through the existing repository adapter; it does not use
 the Supabase Data API or duplicate contract validation. The explicit hosted scripts accept a
@@ -53,14 +63,19 @@ when the hosted `DATABASE_URL` is supplied.
 Start the API, then run:
 
 ```bash
+export INTERNAL_API_TOKEN='replace-with-a-local-token'
+
 curl -i http://127.0.0.1:3000/health
 
-curl -i -X POST http://127.0.0.1:3000/internal/demo/start
+curl -i -X POST http://127.0.0.1:3000/internal/demo/start \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 
 # A hosted rehearsal may request a fresh validated ID instead of deleting old evidence.
-curl -i -X POST 'http://127.0.0.1:3000/internal/demo/start?interactionId=judge-rehearsal-001'
+curl -i -X POST 'http://127.0.0.1:3000/internal/demo/start?interactionId=judge-rehearsal-001' \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 
 curl -i -X POST http://127.0.0.1:3000/internal/demo/demo-001/result \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN" \
   -H 'content-type: application/json' \
   -d '{
     "interactionId": "demo-001",
@@ -70,17 +85,33 @@ curl -i -X POST http://127.0.0.1:3000/internal/demo/demo-001/result \
     "result": "correct"
   }'
 
-curl -i http://127.0.0.1:3000/internal/demo/demo-001
+curl -i http://127.0.0.1:3000/internal/demo/demo-001 \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 
-curl -i http://127.0.0.1:3000/internal/demo
+curl -i http://127.0.0.1:3000/internal/demo \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 
-curl -i http://127.0.0.1:3000/internal/demo/profile
-curl -i http://127.0.0.1:3000/internal/demo/demo-001/events
+curl -i http://127.0.0.1:3000/internal/demo/profile \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
+curl -i http://127.0.0.1:3000/internal/demo/demo-001/events \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
+curl -i 'http://127.0.0.1:3000/internal/messaging/status?verifyProvider=true' \
+  -H "authorization: Bearer $INTERNAL_API_TOKEN"
 ```
 
 The same canonical flow can be run with `pnpm demo:supabase`. Restart
 `pnpm api:start:supabase` afterward and retrieve `/internal/demo/demo-001` to verify that Supabase
 retained the completed interaction.
+
+For the hosted flow, `POST /internal/demo/start?interactionId=<fresh-id>` creates only the existing
+interaction. `POST /internal/demo/<id>/launch` creates the durable messaging session and queues the
+first agent output. `GET /internal/demo/<id>/messaging` returns session/inbox/outbox metadata with
+message bodies removed. The worker reserves every stable key before calling Sendblue and never
+automatically retries an uncertain delivery.
+
+The status route never returns credentials, phone numbers, or bodies. With `verifyProvider=true` it
+performs Sendblue's service lookup and succeeds only when the configured destination is reported as
+`iMessage`; it does not send a message.
 
 `POST /internal/demo/start` returns the Phase 0 fields plus backward-compatible `mode` and `reason`
 defaults. The trace ID

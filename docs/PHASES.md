@@ -129,14 +129,15 @@ Use fake/local messaging for this phase. A real messaging provider is not requir
 
 ### Person A
 
-- put the existing conversation loop behind one real messaging adapter;
+- expose the hosted conversation boundary through `ConversationAgent` without moving transport calls into the agent;
+- put the controlled conversation loop behind the hosted Sendblue adapter;
 - handle one inbound reply;
 - keep the wording short and predictable;
 - keep the fake adapter for tests.
 
 ### Person B
 
-- expose the backend to the messaging runtime;
+- host the API, authenticated Sendblue webhook, and durable worker as one Render service;
 - add basic secrets, logs, and delivery-event storage;
 - serve an image when the context contains one;
 - keep starting the interaction manually.
@@ -144,6 +145,10 @@ Use fake/local messaging for this phase. A real messaging provider is not requir
 ### Done when
 
 William receives one question on a real device, replies once, receives feedback, and the backend stores the full interaction exactly once.
+
+Infrastructure acceptance uses `DeterministicDemoAgent` for the canonical `Solve 2x + 3 = 11.`
+flow. The richer `StudyAgent` remains available for the product path and can later be adapted through
+`ConversationAgent`; neither agent may call Sendblue or PostgreSQL directly.
 
 No schedules, Canvas synchronization, learning model, dashboard, or multi-user support.
 

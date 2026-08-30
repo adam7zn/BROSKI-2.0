@@ -1,9 +1,9 @@
 # Phase 1 database package
 
-This package stores exactly the two Phase 0 payloads plus the operational
-`traceId`, `createdAt`, and nullable `completedAt` fields needed by the Phase 1 backend demonstration.
-It intentionally has no messaging, agent-run, Canvas, vector, scheduling, or
-mastery tables.
+This package stores the two Phase 0 payloads plus the narrow Phase 3 hosted-messaging state needed
+for the Sendblue demonstration. PostgreSQL owns the interaction, profile, normalized delivery
+events, outbound reservations, messaging session, minimized inbox, and outbox. It still has no
+Canvas, learning-memory, scheduler, or mastery tables.
 
 ## Local PostgreSQL and migrations
 
@@ -12,6 +12,7 @@ From the repository root:
 ```sh
 pnpm --filter @math-study-companion/database db:up
 pnpm --filter @math-study-companion/database db:migrate
+pnpm --filter @math-study-companion/database db:migration-status
 ```
 
 The local container listens only on `127.0.0.1:54329` and uses PostgreSQL
@@ -53,9 +54,20 @@ and a PostgreSQL advisory lock. Do not use `supabase db reset` against the hoste
 credentials remain outside the repository, and CI continues to migrate a disposable PostgreSQL 17
 service instead of the hosted database.
 
+Before any hosted migration, run `pnpm db:migration-status:supabase`. The command is read-only and
+prints local migrations as `applied`, `pending`, or `checksum_mismatch`, plus any hosted-only ledger
+names. A historical `0002_add_completed_at.sql` row with the same checksum as the current
+`0003_add_completed_at.sql` is reported as `applied_alias`; the runner leaves that evidence intact
+and safely applies the idempotent current filename as a forward ledger entry. Never rename, delete,
+or rewrite either applied record to make the lists look alike.
+
 ## API integration
 
 The API owns a narrow adapter around `PostgresInteractionRepository`; callers do not import the
 database shape into route or application logic. `complete` receives the accepted completion time,
 and completion is first-write-only under a row lock. Concurrent or repeated results receive
 `DUPLICATE_RESULT` and cannot overwrite the original evidence or timestamp.
+
+The hosted inbox and outbox use transactional `FOR UPDATE SKIP LOCKED` claims. A stale claim may be
+recovered after restart, but an outbound reservation that already exists is marked uncertain and is
+never sent again automatically.

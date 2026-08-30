@@ -9,12 +9,49 @@ interface AppliedMigrationRow extends QueryResultRow {
   checksum: string;
 }
 
+interface MigrationLedgerTableRow extends QueryResultRow {
+  table_name: string | null;
+}
+
+interface LocalMigration {
+  name: string;
+  checksum: string;
+  contents: string;
+}
+
+export type MigrationLedgerState =
+  | 'applied'
+  | 'pending'
+  | 'checksum_mismatch'
+  | 'applied_only'
+  | 'applied_alias';
+
+export interface MigrationLedgerStatus {
+  name: string;
+  state: MigrationLedgerState;
+  equivalentLocalName?: string;
+}
+
 const defaultMigrationsDirectory = fileURLToPath(
   new URL('../migrations', import.meta.url),
 );
 
 const checksum = (contents: string): string =>
   createHash('sha256').update(contents).digest('hex');
+
+const loadLocalMigrations = async (
+  migrationsDirectory: string,
+): Promise<LocalMigration[]> => {
+  const migrationNames = (await readdir(migrationsDirectory))
+    .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name))
+    .sort();
+  return Promise.all(
+    migrationNames.map(async (name) => {
+      const contents = await readFile(`${migrationsDirectory}/${name}`, 'utf8');
+      return { name, contents, checksum: checksum(contents) };
+    }),
+  );
+};
 
 const rollback = async (client: PoolClient): Promise<void> => {
   try {
@@ -28,9 +65,7 @@ export const runMigrations = async (
   pool: Pool,
   migrationsDirectory = defaultMigrationsDirectory,
 ): Promise<void> => {
-  const migrationNames = (await readdir(migrationsDirectory))
-    .filter((name) => /^\d{4}_[a-z0-9_]+\.sql$/.test(name))
-    .sort();
+  const migrations = await loadLocalMigrations(migrationsDirectory);
 
   const client = await pool.connect();
 
@@ -52,9 +87,7 @@ export const runMigrations = async (
       ]),
     );
 
-    for (const name of migrationNames) {
-      const contents = await readFile(`${migrationsDirectory}/${name}`, 'utf8');
-      const expectedChecksum = checksum(contents);
+    for (const { name, contents, checksum: expectedChecksum } of migrations) {
       const appliedChecksum = applied.get(name);
 
       if (appliedChecksum !== undefined) {
@@ -86,4 +119,51 @@ export const runMigrations = async (
       client.release();
     }
   }
+};
+
+export const inspectMigrationLedger = async (
+  pool: Pool,
+  migrationsDirectory = defaultMigrationsDirectory,
+): Promise<MigrationLedgerStatus[]> => {
+  const local = await loadLocalMigrations(migrationsDirectory);
+  const ledgerTable = await pool.query<MigrationLedgerTableRow>(
+    "SELECT to_regclass('schema_migrations')::text AS table_name",
+  );
+  const applied = ledgerTable.rows[0]?.table_name
+    ? (
+        await pool.query<AppliedMigrationRow>(
+          'SELECT name, checksum FROM schema_migrations ORDER BY name',
+        )
+      ).rows
+    : [];
+  const appliedByName = new Map(applied.map((entry) => [entry.name, entry]));
+  const localByChecksum = new Map(
+    local.map((entry) => [entry.checksum, entry.name]),
+  );
+  const statuses: MigrationLedgerStatus[] = local.map((entry) => {
+    const ledgerEntry = appliedByName.get(entry.name);
+    if (!ledgerEntry) return { name: entry.name, state: 'pending' };
+    return {
+      name: entry.name,
+      state:
+        ledgerEntry.checksum === entry.checksum
+          ? 'applied'
+          : 'checksum_mismatch',
+    };
+  });
+  const localNames = new Set(local.map((entry) => entry.name));
+  for (const entry of applied) {
+    if (localNames.has(entry.name)) continue;
+    const equivalentLocalName = localByChecksum.get(entry.checksum);
+    statuses.push(
+      equivalentLocalName
+        ? {
+            name: entry.name,
+            state: 'applied_alias',
+            equivalentLocalName,
+          }
+        : { name: entry.name, state: 'applied_only' },
+    );
+  }
+  return statuses;
 };

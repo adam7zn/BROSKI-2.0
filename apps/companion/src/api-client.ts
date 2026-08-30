@@ -16,11 +16,25 @@ export interface StoredEvent extends DemoMessageEventInput {
   recordedAt: string;
 }
 
+export class DemoApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly code: string,
+    readonly retryable: boolean,
+    readonly traceId: string,
+    options?: ErrorOptions,
+  ) {
+    super(`Demo API request failed (${status} ${code})`, options);
+    this.name = 'DemoApiError';
+  }
+}
+
 export class DemoApiClient {
   constructor(
     private readonly baseUrl: string,
     private readonly traceId: string,
     private readonly fetchImplementation: typeof fetch = fetch,
+    private readonly internalApiToken?: string,
   ) {}
 
   async health(): Promise<void> {
@@ -111,25 +125,86 @@ export class DemoApiClient {
     return body;
   }
 
+  async launch(interactionId: string): Promise<Record<string, unknown>> {
+    const body = await this.#request(
+      `/internal/demo/${encodeURIComponent(interactionId)}/launch`,
+      { method: 'POST' },
+    );
+    if (!isRecord(body)) {
+      throw new Error('API returned an invalid messaging session');
+    }
+    return body;
+  }
+
+  async inspectMessaging(
+    interactionId: string,
+  ): Promise<Record<string, unknown>> {
+    const body = await this.#request(
+      `/internal/demo/${encodeURIComponent(interactionId)}/messaging`,
+    );
+    if (!isRecord(body)) {
+      throw new Error('API returned invalid messaging state');
+    }
+    return body;
+  }
+
   async #request(path: string, init: RequestInit = {}): Promise<unknown> {
     const headers = new Headers(init.headers);
     headers.set('accept', 'application/json');
     headers.set('content-type', 'application/json');
     headers.set('x-trace-id', this.traceId);
-    const response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
-      ...init,
-      headers,
-    });
+    if (path.startsWith('/internal/') && this.internalApiToken) {
+      headers.set('authorization', `Bearer ${this.internalApiToken}`);
+    }
+    let response: Response;
+    try {
+      response = await this.fetchImplementation(`${this.baseUrl}${path}`, {
+        ...init,
+        headers,
+      });
+    } catch (error) {
+      throw new DemoApiError(0, 'NETWORK_ERROR', true, this.traceId, {
+        cause: error,
+      });
+    }
     const body = (await response.json().catch(() => null)) as unknown;
     if (!response.ok) {
       const code =
         isRecord(body) && typeof body.code === 'string'
           ? body.code
           : 'HTTP_ERROR';
-      throw new Error(`Demo API request failed (${response.status} ${code})`);
+      const retryable =
+        isRecord(body) && typeof body.retryable === 'boolean'
+          ? body.retryable
+          : response.status === 429 || response.status >= 500;
+      throw new DemoApiError(
+        response.status,
+        code,
+        retryable,
+        returnedTraceId(body, response, this.traceId),
+      );
+    }
+    if (body === null) {
+      throw new DemoApiError(
+        response.status,
+        'INVALID_API_RESPONSE',
+        false,
+        returnedTraceId(body, response, this.traceId),
+      );
     }
     return body;
   }
+}
+
+function returnedTraceId(
+  body: unknown,
+  response: Response,
+  fallback: string,
+): string {
+  if (isRecord(body) && typeof body.traceId === 'string' && body.traceId) {
+    return body.traceId;
+  }
+  return response.headers.get('x-trace-id') || fallback;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

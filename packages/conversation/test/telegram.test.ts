@@ -139,6 +139,7 @@ test('an API error names the method and status but never the token', async () =>
 });
 
 test('polling yields allowed chats only and advances the offset past every update', async () => {
+  const controller = new AbortController();
   const { impl, calls } = stubFetch([
     {
       ok: true,
@@ -149,15 +150,15 @@ test('polling yields allowed chats only and advances the offset past every updat
   const telegram = new TelegramMessagingProvider({
     token: TOKEN,
     allowedConversationIds: ['555'],
-    fetchImpl: impl,
+    fetchImpl: async (...args) => {
+      const response = await impl(...args);
+      if (calls.length === 2) controller.abort();
+      return response;
+    },
     pollTimeoutSeconds: 0,
   });
 
-  const controller = new AbortController();
   const seen: string[] = [];
-  // Let the loop poll a second time before stopping, so the next offset is
-  // observable in the recorded calls.
-  setTimeout(() => controller.abort(), 50);
   for await (const event of telegram.listen({ signal: controller.signal })) {
     seen.push(event.text);
   }

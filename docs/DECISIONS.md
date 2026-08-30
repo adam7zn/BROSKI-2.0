@@ -427,6 +427,49 @@ mode is regularly the wrong one.
 
 ---
 
+## ADR-016 — Hosted Sendblue transport with an in-process agent port
+
+**Status:** ACCEPTED
+**Date:** 2026-08-29
+
+### Decision
+
+Run the Phase 3 real-message path as one Render Node web service containing the API, authenticated
+Sendblue webhook, and durable PostgreSQL inbox/outbox worker. Sendblue is the only hosted live
+transport. Local iMessage and Telegram adapters remain available for their existing local runners.
+Hosted conversation behavior is exposed through an in-process `ConversationAgent` interface that
+returns validated intents and never calls a messaging provider or PostgreSQL directly.
+
+### Reason
+
+The pilot must work without an awake Mac while preserving one coherent learning boundary and
+at-most-once outbound behavior. Keeping transport ownership in the messaging worker prevents
+provider calls, delivery uncertainty, and persistence from leaking into agent code.
+
+### Consequences
+
+- webhook requests use a separate secret; hosted internal routes use bearer authentication;
+- Sendblue account-level events are filtered to the configured participant and line;
+- session, minimized inbox, and outbox state are durably claimed and restart-safe;
+- stable idempotency keys are reserved before provider calls, and ambiguous sends are never retried;
+- SMS downgrade fails the session closed, while `MESSAGING_LIVE_ENABLED=false` is the default;
+- an authenticated status route exposes the kill-switch state and can perform a no-send iMessage
+  availability lookup before the operator enables delivery;
+- attachments require HTTPS media URLs, and the first live test remains text-only;
+- the deterministic agent proves the canonical infrastructure loop; adapting the richer `StudyAgent`
+  to this boundary is a later behavior change and does not move its transport responsibilities;
+- automated tests use injected fake providers and never contact Sendblue or hosted PostgreSQL;
+- a read-only migration-ledger audit preserves historical filenames. A legacy applied
+  `0002_add_completed_at.sql` entry may coexist with the current idempotent
+  `0003_add_completed_at.sql` forward entry; neither applied record is rewritten.
+
+### Revisit when
+
+The pilot needs multiple recipients, horizontal worker concurrency beyond one Render instance,
+provider failover, a supported Sendblue idempotency API, or a separately deployed agent process.
+
+---
+
 # ADR template
 
 ```markdown
@@ -476,4 +519,3 @@ CLI processes, and the API server arrives with deployment.
    sent on a schedule.
 
 ---
-

@@ -336,12 +336,12 @@ export class PostgresSourceContentRepository {
     if (page === undefined)
       throw new Error(`Source page ${pageId} was not found.`);
     const blocks = await this.pool.query<BlockRow>(
-      `SELECT id, source_page_id, sequence_number, block_type, bounding_box,
-              confidence, review_state, review_reasons, current_content_markdown
+      `SELECT b.id, b.source_page_id, b.sequence_number, b.block_type, b.bounding_box,
+              b.confidence, b.review_state, b.review_reasons, b.current_content_markdown
        FROM source_blocks b JOIN source_pages p ON p.id = b.source_page_id
        WHERE b.source_page_id = $1 AND b.extraction_run_id = p.active_extraction_run_id
          AND b.deleted_at IS NULL
-       ORDER BY sequence_number, id`,
+       ORDER BY b.sequence_number, b.id`,
       [pageId],
     );
     const blockIds = blocks.rows.map((row) => row.id);

@@ -78,6 +78,14 @@ The MVP processes private educational information and a potentially copyrighted 
 - Do not include sensitive full course records in lock-screen-visible messages.
 - Avoid sending assessment scores or detailed weakness summaries proactively unless William has explicitly enabled it.
 - Treat images and attachments as private objects with expiring URLs where possible.
+- Sendblue media inputs must be HTTPS URLs. The first live flow is text-only; never expose local or
+  private textbook paths merely to make them downloadable by the provider.
+- Keep the hosted live-delivery kill switch off except during a controlled, allowlisted phone test.
+- Do not log Sendblue payloads, message bodies, API credentials, webhook secrets, or bearer tokens.
+- Require the bearer token even when the configured API runtime uses disposable memory; only the
+  health route and separately authenticated Sendblue webhook are outside `/internal/*`.
+- Operational inspection and provider-status responses must omit phone numbers, agent state,
+  message bodies, student replies, and credentials.
 
 ## 8. Retention
 
@@ -140,4 +148,3 @@ Complete a separate review covering:
 - accessibility;
 - security testing; and
 - incident response ownership.
-

@@ -242,6 +242,14 @@ POST /internal/interactions/:interactionId/cancel
 POST /webhooks/messaging/:provider
 ```
 
+The Phase 3 hosted route is `POST /webhooks/messaging/sendblue`. It compares the
+`sb-signing-secret` header in constant time, strictly normalizes message webhooks, allowlists the
+single configured participant and Sendblue line, and durably deduplicates by `message_handle`
+before acknowledging with 2xx. `SENT`, `DELIVERED`, and `ERROR` are stored as normalized delivery
+events. Because Sendblue cannot disable automatic SMS fallback, every outbound send first calls its
+service lookup and proceeds only for `iMessage`; SMS/RCS service or `was_downgraded: true` in the
+send response or webhook then fails the session closed.
+
 Rules:
 
 - verify signature/authentication when supported;
@@ -249,6 +257,28 @@ Rules:
 - deduplicate before evaluation;
 - return provider-required success quickly;
 - perform slow evaluation asynchronously if needed.
+
+Hosted operator routes use `Authorization: Bearer <INTERNAL_API_TOKEN>`. The existing start route is
+unchanged; `POST /internal/demo/:interactionId/launch` creates the messaging session and queues the
+first validated `ConversationAgent` output. `GET /internal/demo/:interactionId/messaging` exposes
+operational metadata without message content.
+
+`GET /internal/messaging/status` returns only `{ provider, liveEnabled, availability }`.
+`availability` is `null` unless `verifyProvider=true`; with that flag the adapter performs a
+read-only `/api/evaluate-service` lookup and fails closed unless Sendblue reports `iMessage`.
+
+The smarter agent adapter must implement this exact in-process boundary:
+
+```ts
+interface ConversationAgent {
+  startSession(input: AgentSessionStartInput): Promise<ConversationAgentOutput>;
+  handleInbound(input: AgentInboundTurnInput): Promise<ConversationAgentOutput>;
+}
+```
+
+Each output is runtime-validated before persistence. A completed inbound turn must include one
+result whose `interactionId` matches the durable session. The agent may return message intents,
+profile evidence, state, and a result; it never sends a provider request or writes PostgreSQL.
 
 ### Evaluation
 
@@ -363,4 +393,3 @@ interface AppErrorPayload {
 ```
 
 Do not expose provider credentials, raw private source data, or model prompts in external error responses.
-

@@ -10,6 +10,7 @@
     "db:up": "docker compose up -d --wait",
     "db:down": "docker compose down",
     "db:migrate": "tsx src/migrate.ts",
+    "db:migration-status": "tsx src/migration-status.ts",
     "db:import-chapter": "tsx src/import-chapter.ts",
     "db:import-structured-chapter": "tsx src/import-structured-chapter.ts",
     "test": "vitest run --config vitest.config.ts",

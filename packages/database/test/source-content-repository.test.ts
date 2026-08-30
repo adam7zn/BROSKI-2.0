@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { StructuredExtraction } from '@math-study-companion/contracts';
 import { Pool } from 'pg';
@@ -17,7 +17,9 @@ const extraction: StructuredExtraction = {
   schemaVersion: 1,
   pipelineVersion: 'test-v1',
   documentTitle: 'Test chapter',
-  inputChecksum: createHash('sha256').update('structured-test').digest('hex'),
+  inputChecksum: createHash('sha256')
+    .update(`structured-test:${randomUUID()}`)
+    .digest('hex'),
   configuration: { externalRequests: false },
   pages: [
     {

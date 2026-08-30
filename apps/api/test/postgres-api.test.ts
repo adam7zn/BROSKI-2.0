@@ -19,6 +19,7 @@ const connectionString =
   'postgresql://postgres@127.0.0.1:54329/math_study_companion';
 
 const setupPool = new Pool({ connectionString });
+const internalApiToken = 'postgres-api-test-token';
 let context: BackendContext;
 let result: ConversationResult;
 
@@ -46,7 +47,10 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
   const start = await fetch(`${firstApi.baseUrl}/internal/demo/start`, {
     method: 'POST',
-    headers: { 'x-trace-id': 'postgres-trace-001' },
+    headers: {
+      authorization: `Bearer ${internalApiToken}`,
+      'x-trace-id': 'postgres-trace-001',
+    },
   });
   assert.equal(start.status, 201);
   assert.deepEqual(await start.json(), context);
@@ -55,6 +59,7 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
     method: 'PUT',
     headers: {
       'content-type': 'application/json',
+      authorization: `Bearer ${internalApiToken}`,
       'x-trace-id': 'postgres-trace-001',
     },
     body: JSON.stringify({
@@ -105,6 +110,7 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
   try {
     const retrieve = await fetch(
       `${restartedApi.baseUrl}/internal/demo/${context.interactionId}`,
+      { headers: internalHeaders() },
     );
     assert.equal(retrieve.status, 200);
     assert.equal(retrieve.headers.get('x-trace-id'), 'postgres-trace-001');
@@ -112,11 +118,14 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
     const savedProfile = await fetch(
       `${restartedApi.baseUrl}/internal/demo/profile`,
+      { headers: internalHeaders() },
     );
     assert.equal(savedProfile.status, 200);
     assert.equal((await savedProfile.json()).course, 'Mathematics 3c');
     const eventsPath = `/internal/demo/${context.interactionId}/events`;
-    const savedEvents = await fetch(`${restartedApi.baseUrl}${eventsPath}`);
+    const savedEvents = await fetch(`${restartedApi.baseUrl}${eventsPath}`, {
+      headers: internalHeaders(),
+    });
     assert.equal((await savedEvents.json()).events.length, 1);
     const duplicateEvent = await postJson(
       restartedApi.baseUrl,
@@ -128,7 +137,7 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
     const duplicateStart = await fetch(
       `${restartedApi.baseUrl}/internal/demo/start`,
-      { method: 'POST' },
+      { method: 'POST', headers: internalHeaders() },
     );
     assert.equal(duplicateStart.status, 409);
     assert.equal((await duplicateStart.json()).code, 'DUPLICATE_INTERACTION');
@@ -151,6 +160,7 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
     const missing = await fetch(
       `${restartedApi.baseUrl}/internal/demo/missing-interaction`,
+      { headers: internalHeaders() },
     );
     assert.equal(missing.status, 404);
     assert.equal((await missing.json()).code, 'INTERACTION_NOT_FOUND');
@@ -168,6 +178,7 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
     const unchanged = await fetch(
       `${restartedApi.baseUrl}/internal/demo/${context.interactionId}`,
+      { headers: internalHeaders() },
     );
     assert.deepEqual(await unchanged.json(), completed);
   } finally {
@@ -177,7 +188,10 @@ test('PostgreSQL preserves the canonical HTTP flow across API recreation', async
 
 async function startPostgresApi() {
   const runtime = await createConfiguredDemoApp({
-    environment: { DATABASE_URL: connectionString },
+    environment: {
+      DATABASE_URL: connectionString,
+      INTERNAL_API_TOKEN: internalApiToken,
+    },
   });
   assert.equal(runtime.persistence, 'postgresql');
   await new Promise<void>((resolve, reject) => {
@@ -212,7 +226,14 @@ function postJson(
 ): Promise<Response> {
   return fetch(`${baseUrl}${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: {
+      ...internalHeaders(),
+      'content-type': 'application/json',
+    },
     body: JSON.stringify(body),
   });
+}
+
+function internalHeaders(): Record<string, string> {
+  return { authorization: `Bearer ${internalApiToken}` };
 }

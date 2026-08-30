@@ -30,6 +30,7 @@ describe('Phase 1 demo API', () => {
       environment: {
         DATABASE_URL: 'postgresql://postgres@127.0.0.1:1/unreachable',
         DEMO_REPOSITORY: 'memory',
+        INTERNAL_API_TOKEN: 'memory-test-token',
       },
     });
     assert.equal(memory.persistence, 'memory');
@@ -39,8 +40,26 @@ describe('Phase 1 demo API', () => {
       createConfiguredDemoApp({
         environment: {
           DATABASE_URL: 'postgresql://postgres@127.0.0.1:1/unreachable',
+          INTERNAL_API_TOKEN: 'postgres-test-token',
         },
       }),
+    );
+  });
+
+  it('requires internal authentication and complete live messaging configuration at startup', async () => {
+    await assert.rejects(
+      createConfiguredDemoApp({ environment: { DEMO_REPOSITORY: 'memory' } }),
+      /INTERNAL_API_TOKEN is required/,
+    );
+    await assert.rejects(
+      createConfiguredDemoApp({
+        environment: {
+          DEMO_REPOSITORY: 'memory',
+          INTERNAL_API_TOKEN: 'test-token',
+          MESSAGING_LIVE_ENABLED: 'true',
+        },
+      }),
+      /requires hosted Sendblue messaging configuration/,
     );
   });
 
