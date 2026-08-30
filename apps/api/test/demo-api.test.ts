@@ -80,11 +80,21 @@ describe('Phase 1 demo API', () => {
       () => buildConversationAgent({ CONVERSATION_AGENT_PROVIDER: 'other' }),
       /must be deterministic or anthropic/,
     );
+    assert.throws(
+      () =>
+        buildConversationAgent({
+          CONVERSATION_AGENT_PROVIDER: 'anthropic',
+          ANTHROPIC_API_KEY: 'synthetic-test-key',
+          SCREEN_RECORDING_DEMO_ENABLED: 'sometimes',
+        }),
+      /SCREEN_RECORDING_DEMO_ENABLED must be true or false/,
+    );
     assert.ok(
       buildConversationAgent({
         CONVERSATION_AGENT_PROVIDER: 'anthropic',
         ANTHROPIC_API_KEY: 'synthetic-test-key',
         MSC_MODEL: 'claude-sonnet-5',
+        SCREEN_RECORDING_DEMO_ENABLED: 'true',
       }) instanceof ClaudeConversationAgent,
     );
   });

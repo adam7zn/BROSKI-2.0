@@ -28,6 +28,7 @@ export interface PersistenceEnvironment {
   INTERNAL_API_TOKEN?: string;
   MESSAGING_LIVE_ENABLED?: string;
   MSC_MODEL?: string;
+  SCREEN_RECORDING_DEMO_ENABLED?: string;
   SENDBLUE_API_BASE_URL?: string;
   SENDBLUE_API_KEY_ID?: string;
   SENDBLUE_API_SECRET_KEY?: string;
@@ -199,6 +200,10 @@ export function buildConversationAgent(
   const model = environment.MSC_MODEL?.trim() || 'claude-sonnet-5';
   return new ClaudeConversationAgent({
     studyAgent: new ClaudeStudyAgent({ apiKey, model }),
+    screenRecordingDemo: parseBoolean(
+      environment.SCREEN_RECORDING_DEMO_ENABLED,
+      'SCREEN_RECORDING_DEMO_ENABLED',
+    ),
   });
 }
 

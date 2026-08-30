@@ -220,6 +220,14 @@ questions. These create durable message turns without changing the first accepte
 or low-confidence requests receive a fixed boundary, and selecting a different exercise remains a
 manual authenticated action.
 
+For a controlled screen recording only, set `SCREEN_RECORDING_DEMO_ENABLED=true` while Anthropic is
+selected. A verified numeric exercise then runs as a fixed two-question script: a short
+maths-to-football introduction, the exact selected book prompt, deterministic correction, the words
+`next question`, the canonical `Solve 2x + 3 = 11.` warm-up, and a fixed closing response. The first
+book attempt remains the only accepted interaction result; the second warm-up is retained as durable
+follow-up transcript evidence. This flag defaults to `false` and does not claim that Canvas or a
+live football schedule selected the exercise.
+
 Keep both `CONVERSATION_AGENT_PROVIDER=deterministic` and `MESSAGING_LIVE_ENABLED=false` for the
 first deployment. Hosted migration, hosted draft import, Anthropic activation, and any real send
 remain separate approval gates.

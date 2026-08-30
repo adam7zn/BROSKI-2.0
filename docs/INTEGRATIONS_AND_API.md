@@ -301,6 +301,12 @@ exercise session; a later provider event can recover it while the failed inbound
 Follow-up responses use the basic Anthropic Messages endpoint and are parsed and validated against
 the runtime Zod schema before persistence; malformed JSON is rejected without an outbox write.
 
+An operator may temporarily set `SCREEN_RECORDING_DEMO_ENABLED=true` for a controlled recording.
+This opt-in keeps the manually selected verified exercise as the durable result, deterministically
+corrects a numeric answer, accepts only `next`, `next question`, `nästa`, or `nästa fråga` as the
+transition, and asks the canonical linear-equation warm-up as a durable follow-up turn. It does not
+select from Canvas, does not create a second attempt, and defaults to disabled.
+
 The smarter agent adapter must implement this exact in-process boundary:
 
 ```ts

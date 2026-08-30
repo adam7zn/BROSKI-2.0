@@ -18,10 +18,12 @@ services:
         value: anthropic
       - key: MSC_MODEL
         value: claude-sonnet-5
+      - key: SCREEN_RECORDING_DEMO_ENABLED
+        value: 'false'
       - key: SENDBLUE_API_BASE_URL
         value: https://api.sendblue.co
       - key: MESSAGING_LIVE_ENABLED
-        value: "true"
+        value: 'true'
       - key: DATABASE_URL
         sync: false
       - key: SENDBLUE_API_KEY_ID

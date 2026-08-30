@@ -186,6 +186,9 @@ Ten manually started interactions use real material and can be reviewed from sou
 - after a verified exercise is completed, related follow-up messages can receive bounded Claude
   explanations while the original result remains first-write-only; unrelated or low-confidence
   messages receive a fixed boundary and do not turn the companion into a general chat bot.
+- an opt-in screen-recording flag can run one verified numeric exercise followed by the canonical
+  warm-up with fixed transitions; it is disabled by default and is demonstration behavior, not
+  evidence of Canvas scheduling or a second persisted attempt.
 
 Phase 4 is not complete until at least ten real-material interactions have passed the full review,
 messaging, feedback, and durable-result loop. Hosted migration/import, Anthropic activation, and

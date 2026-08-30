@@ -240,6 +240,93 @@ test('answers a bounded follow-up without replacing the completed result', async
   assert.equal(output.outbound[0]?.purpose, 'follow-up');
 });
 
+test('runs the opt-in two-question screen-recording sequence deterministically', async () => {
+  const numericExercise: VerifiedExerciseContext = {
+    ...exercise,
+    prompt: 'Evaluate p(0) for p(x) = 2x² + 3x − 7.',
+    answerPayload: { canonical: '-7', accepted: [] },
+    solutionText: 'p(0) = 2 · 0² + 3 · 0 − 7 = −7.',
+    rubric: 'Accept −7 in any unambiguous numeric form.',
+    gradingStrategy: 'numeric',
+  };
+  const agent = new ClaudeConversationAgent({
+    screenRecordingDemo: true,
+    studyAgent: {
+      askQuestion: async () => {
+        throw new Error('unused');
+      },
+      respond: async () => {
+        throw new Error('The fixed numeric demo must not call Claude');
+      },
+    },
+  });
+  const started = await agent.startSession({
+    context,
+    profile: {
+      course: 'Mathematics 3c',
+      selfAssessedLevel: 'okay',
+      previousGrade: null,
+    },
+    exercise: numericExercise,
+    traceId: 'trace-recording',
+  });
+
+  assert.equal(started.outbound[0]?.purpose, 'screen-recording-intro');
+  assert.match(started.outbound[0]?.text ?? '', /maths and football/i);
+  assert.equal(started.outbound[1]?.text, numericExercise.prompt);
+
+  const corrected = await agent.handleInbound({
+    interactionId: context.interactionId,
+    context,
+    exercise: numericExercise,
+    text: '5',
+    receivedAt: '2026-08-30T08:01:00.000Z',
+    history: [
+      {
+        direction: 'outbound',
+        text: numericExercise.prompt,
+        occurredAt: '2026-08-30T08:00:00.000Z',
+      },
+    ],
+    agentState: started.agentState,
+    traceId: 'trace-recording',
+  });
+  assert.equal(corrected.status, 'completed');
+  assert.equal(corrected.result?.result, 'incorrect');
+  assert.equal((corrected.outbound[0]?.text ?? '').includes('−7'), true);
+
+  const next = await agent.handleInbound({
+    interactionId: context.interactionId,
+    context,
+    exercise: numericExercise,
+    text: 'next question',
+    receivedAt: '2026-08-30T08:02:00.000Z',
+    history: [],
+    agentState: corrected.agentState,
+    traceId: 'trace-recording',
+  });
+  assert.equal(next.status, 'waiting');
+  assert.equal(next.result, null);
+  assert.equal(next.outbound[0]?.text, 'Solve 2x + 3 = 11.');
+
+  const finished = await agent.handleInbound({
+    interactionId: context.interactionId,
+    context,
+    exercise: numericExercise,
+    text: 'x = 4',
+    receivedAt: '2026-08-30T08:03:00.000Z',
+    history: [],
+    agentState: next.agentState,
+    traceId: 'trace-recording',
+  });
+  assert.equal(finished.status, 'waiting');
+  assert.equal(finished.result, null);
+  assert.match(
+    finished.outbound[0]?.text ?? '',
+    /finishes the two-question demo/i,
+  );
+});
+
 test('enforces the unrelated follow-up boundary returned by Claude', async () => {
   const agent = new ClaudeStudyAgent({
     client: fakeAnthropicClient(async () => ({

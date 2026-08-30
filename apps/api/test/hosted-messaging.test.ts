@@ -112,6 +112,65 @@ test('launches the manually selected verified prompt unchanged through the durab
   );
 });
 
+test('keeps the fixed screen-recording sequence durable across completed follow-up turns', async () => {
+  const exercise = syntheticNumericVerifiedExercise();
+  const fixture = await createFixture({
+    interactionId: 'screen-recording-run',
+    exercise,
+    agent: new ClaudeConversationAgent({
+      screenRecordingDemo: true,
+      studyAgent: {
+        askQuestion: async () => {
+          throw new Error('unused');
+        },
+        respond: async () => {
+          throw new Error('The fixed numeric demo must not call Claude');
+        },
+      },
+    }),
+  });
+  await fixture.app.service.saveProfile(
+    {
+      course: 'Mathematics 3c',
+      selfAssessedLevel: 'okay',
+      previousGrade: null,
+    },
+    'trace-1',
+  );
+
+  await fixture.launch();
+  assert.match(fixture.provider.sent[0]?.text ?? '', /maths and football/i);
+  assert.equal(fixture.provider.sent[1]?.text, exercise.prompt);
+
+  await fixture.reply('5', 'screen-in-1');
+  const completed = await fixture.app.service.get(
+    'screen-recording-run',
+    'request',
+  );
+  assert.equal(completed.result?.result, 'incorrect');
+  assert.match(fixture.provider.sent[2]?.text ?? '', /−7/);
+
+  await fixture.reply('next question', 'screen-in-2');
+  assert.equal(fixture.provider.sent[3]?.text, 'Solve 2x + 3 = 11.');
+
+  await fixture.reply('x = 4', 'screen-in-3');
+  assert.match(
+    fixture.provider.sent[4]?.text ?? '',
+    /finishes the two-question demo/i,
+  );
+  const afterFollowUps = await fixture.app.service.get(
+    'screen-recording-run',
+    'request',
+  );
+  assert.deepEqual(afterFollowUps.result, completed.result);
+  const inspected = await fixture.app.messaging!.inspect(
+    'screen-recording-run',
+    'request',
+  );
+  assert.equal(inspected.session?.status, 'completed');
+  assert.equal(inspected.session?.turnNumber, 3);
+});
+
 test('deduplicates inbound handles and filters wrong, group, and old events', async () => {
   const fixture = await createFixture();
   await fixture.launch();
@@ -695,6 +754,17 @@ function syntheticVerifiedExercise(): VerifiedExerciseContext {
     verificationState: 'verified',
     verifiedBy: 'test-reviewer',
     verifiedAt: '2026-08-30T08:00:00.000Z',
+  };
+}
+
+function syntheticNumericVerifiedExercise(): VerifiedExerciseContext {
+  return {
+    ...syntheticVerifiedExercise(),
+    prompt: 'Evaluate p(0) for p(x) = 2x² + 3x − 7.',
+    answerPayload: { canonical: '-7', accepted: [] },
+    solutionText: 'p(0) = 2 · 0² + 3 · 0 − 7 = −7.',
+    rubric: 'Accept −7 in any unambiguous numeric form.',
+    gradingStrategy: 'numeric',
   };
 }
 

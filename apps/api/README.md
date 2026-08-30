@@ -46,6 +46,10 @@ non-empty `ANTHROPIC_API_KEY` and uses `MSC_MODEL` (default `claude-sonnet-5`). 
 values or a missing key fail startup. There is no implicit fallback from an explicitly selected
 Anthropic agent.
 
+`SCREEN_RECORDING_DEMO_ENABLED` defaults to `false`. When explicitly enabled with Anthropic, a
+manually selected verified numeric exercise uses the bounded two-question recording script described
+in the root README; normal exercise and follow-up behavior is unchanged while it is false.
+
 The hosted API uses Supabase as PostgreSQL through the existing repository adapter; it does not use
 the Supabase Data API or duplicate contract validation. The explicit hosted scripts accept a
 deployment-provided `DATABASE_URL`, an ignored `.env.supabase`, or the configured macOS Keychain
