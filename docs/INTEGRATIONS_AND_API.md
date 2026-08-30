@@ -294,6 +294,8 @@ context and recent transcript. Unrelated or low-confidence requests receive a fi
 provider failure still fails closed without invented feedback. Starting a new exercise remains an
 explicit authenticated action. A failed follow-up does not erase or permanently stop the completed
 exercise session; a later provider event can recover it while the failed inbound evidence remains.
+Follow-up responses use the basic Anthropic Messages endpoint and are parsed and validated against
+the runtime Zod schema before persistence; malformed JSON is rejected without an outbox write.
 
 The smarter agent adapter must implement this exact in-process boundary:
 

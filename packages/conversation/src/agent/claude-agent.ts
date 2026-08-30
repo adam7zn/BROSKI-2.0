@@ -247,18 +247,16 @@ export class ClaudeStudyAgent implements StudyAgent {
   }
 
   async followUp(input: FollowUpInput): Promise<FollowUpTurn> {
-    const response = await this.#client.messages.parse({
+    const response = await this.#client.messages.create({
       model: this.#model,
-      max_tokens: 4096,
+      max_tokens: 1024,
       system: [
         'You are a concise mathematics tutor handling a follow-up to one completed exercise.',
         'Decide whether the latest message is about that exercise, its solution, or the mathematics directly needed to understand it.',
         'If it is related, answer clearly in at most four short sentences. Never invent a different exercise or textbook fact.',
         'If it is unrelated, set related=false. Do not answer the unrelated request.',
+        'Return only one JSON object with exactly these fields: related (boolean), message (string), confidence (number from 0 to 1). Do not use Markdown fences.',
       ].join(' '),
-      output_config: {
-        format: zodOutputFormat(followUpOutputSchema),
-      },
       messages: [
         {
           role: 'user',
@@ -276,8 +274,8 @@ export class ClaudeStudyAgent implements StudyAgent {
         },
       ],
     });
-    const parsed = response.parsed_output;
-    if (parsed === null || parsed === undefined) {
+    const parsed = parseFollowUpResponse(response);
+    if (parsed === null) {
       throw new ModelOutputError('followUp');
     }
     const related = parsed.related && parsed.confidence >= MIN_CONFIDENCE;
@@ -291,6 +289,30 @@ export class ClaudeStudyAgent implements StudyAgent {
         model: this.#model,
       },
     };
+  }
+}
+
+function parseFollowUpResponse(
+  response: unknown,
+): z.infer<typeof followUpOutputSchema> | null {
+  if (typeof response !== 'object' || response === null) return null;
+  const candidate = response as {
+    parsed_output?: unknown;
+    content?: Array<{ type?: unknown; text?: unknown }>;
+  };
+  if (candidate.parsed_output !== undefined) {
+    const parsed = followUpOutputSchema.safeParse(candidate.parsed_output);
+    return parsed.success ? parsed.data : null;
+  }
+  const text = candidate.content?.find(
+    (block) => block.type === 'text' && typeof block.text === 'string',
+  )?.text;
+  if (typeof text !== 'string') return null;
+  try {
+    const parsed = followUpOutputSchema.safeParse(JSON.parse(text));
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
   }
 }
 

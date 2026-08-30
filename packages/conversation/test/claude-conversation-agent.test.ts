@@ -243,11 +243,16 @@ test('answers a bounded follow-up without replacing the completed result', async
 test('enforces the unrelated follow-up boundary returned by Claude', async () => {
   const agent = new ClaudeStudyAgent({
     client: fakeAnthropicClient(async () => ({
-      parsed_output: {
-        related: false,
-        message: 'An unsafe unrelated answer.',
-        confidence: 0.99,
-      },
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            related: false,
+            message: 'An unsafe unrelated answer.',
+            confidence: 0.99,
+          }),
+        },
+      ],
     })),
   });
   const input = claudeRespondInput();
@@ -415,7 +420,7 @@ function fakeAnthropicClient(
   parse: (...args: unknown[]) => Promise<unknown>,
 ): Anthropic {
   return {
-    messages: { parse },
+    messages: { parse, create: parse },
   } as unknown as Anthropic;
 }
 
