@@ -130,8 +130,9 @@ test('only the pages retrieval found are put in front of the model', async () =>
   });
 
   assert.match(prompts[0]!, /s\. 84/);
-  // The page about linear equations was never sent.
-  assert.ok(!prompts[0]!.includes('s. 20'));
+  // The page about linear equations is named in the catalogue, but what it
+  // says was never sent.
+  assert.ok(!prompts[0]!.includes('Linjära ekvationer löses'));
 });
 
 test('a page the model claims but never saw is dropped', async () => {
@@ -329,7 +330,7 @@ test('an unrelated page is still left out when the photo finds pages', async () 
     ),
   });
 
-  assert.ok(!prompts[0]!.includes('s. 20'));
+  assert.ok(!prompts[0]!.includes('Linjära ekvationer löses'));
 });
 
 test('the reply is laid out in parts, not as a wall of text', async () => {
@@ -390,4 +391,44 @@ test('blank parts do not leave holes in the reply', async () => {
   });
 
   assert.equal(turn.answer, 'Halvera p först.\n\n1. Kvadrera hälften av p.');
+});
+
+test('it is told the name of every page read in, not only the ones retrieved', async () => {
+  const prompts: string[] = [];
+  await runTutorTurn({
+    question: 'hjälp mig med uppgift 1117',
+    pages,
+    client: stubClient(
+      {
+        covered: false,
+        message: 'Jag har s. 20-85 inlästa, och 1117 finns inte på någon.',
+      },
+      (content) => prompts.push(textOf(content)),
+    ),
+  });
+
+  // "Not in your book" is only actionable when it can say what is in it.
+  for (const page of pages) {
+    assert.ok(
+      prompts[0]!.includes(page.label),
+      `${page.label} was missing from the catalogue`,
+    );
+  }
+});
+
+test('the catalogue names the page just photographed too', async () => {
+  const prompts: string[] = [];
+  await runTutorTurn({
+    question: 'vad är det här',
+    pages: [],
+    pinned: [
+      { id: 'upload:abc', label: 'Uppgifter 1117-1129', text: 'x(x - 3)' },
+    ],
+    client: stubClient(
+      { covered: true, message: 'Det är multiplikation av polynom.' },
+      (content) => prompts.push(textOf(content)),
+    ),
+  });
+
+  assert.match(prompts[0]!, /Uppgifter 1117-1129/);
 });

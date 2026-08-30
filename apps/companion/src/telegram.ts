@@ -41,6 +41,18 @@ async function main(): Promise<void> {
   const messaging = new TelegramMessagingProvider({
     token: config.telegramToken,
     allowedConversationIds: [config.telegramChatId],
+    onPollError: (failure) => {
+      console.error(`\n${failure.message}`);
+      if (failure.kind === 'conflict') {
+        // A companion started before this one was locked out keeps running and
+        // keeps answering; nothing here can stop it, so say how.
+        console.error(
+          'Stop every copy, then start one:\n' +
+            '  pkill -f "src/telegram.ts"\n' +
+            '  pnpm telegram\n',
+        );
+      }
+    },
   });
 
   await serve({

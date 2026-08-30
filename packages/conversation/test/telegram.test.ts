@@ -386,7 +386,8 @@ test('a second companion on the same token is said out loud, not swallowed', asy
     allowedConversationIds: ['555'],
     fetchImpl: impl,
     pollTimeoutSeconds: 0,
-    onPollError: (message) => warnings.push(message),
+    onPollError: (failure) =>
+      warnings.push(`${failure.kind}: ${failure.message}`),
   });
 
   const controller = new AbortController();
@@ -400,7 +401,10 @@ test('a second companion on the same token is said out loud, not swallowed', asy
   // Two processes both answer, and the student gets two replies to one
   // question. A silent retry is how that goes unnoticed.
   assert.ok(
-    warnings.some((line) => line.includes('Another process')),
+    warnings.some(
+      (line) =>
+        line.startsWith('conflict:') && line.includes('Another process'),
+    ),
     `expected a conflict warning, got ${JSON.stringify(warnings)}`,
   );
 });

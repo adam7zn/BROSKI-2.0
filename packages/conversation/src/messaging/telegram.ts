@@ -53,7 +53,19 @@ export interface TelegramOptions {
    * same message twice, and swallowing the conflict is how that goes unnoticed
    * until a student gets two different answers.
    */
-  onPollError?: (message: string) => void;
+  onPollError?: (failure: PollFailure) => void;
+}
+
+/**
+ * A poll that did not come back.
+ *
+ * `conflict` is separate because it is the only one the person running the
+ * companion has to do something about, and what they have to do depends on how
+ * they started it — which the runner knows and this file does not.
+ */
+export interface PollFailure {
+  kind: 'conflict' | 'transient';
+  message: string;
 }
 
 /** Raw update shape, narrowed to the fields the companion uses. */
@@ -160,7 +172,7 @@ export class TelegramMessagingProvider
   readonly #ledger = new IdempotencyLedger();
   readonly #deliverBacklog: boolean;
   readonly #startedAt: Date;
-  readonly #onPollError: (message: string) => void;
+  readonly #onPollError: (failure: PollFailure) => void;
   #offset = 0;
 
   constructor(options: TelegramOptions) {
@@ -174,7 +186,7 @@ export class TelegramMessagingProvider
     this.#deliverBacklog = options.deliverBacklog ?? false;
     this.#startedAt = (options.now ?? (() => new Date()))();
     this.#onPollError =
-      options.onPollError ?? ((message) => console.error(message));
+      options.onPollError ?? ((failure) => console.error(failure.message));
   }
 
   allows(conversationId: string): boolean {
@@ -352,15 +364,21 @@ export class TelegramMessagingProvider
  * two companions on one token both answer, and the student sees two replies to
  * one question — one of them about the wrong exercise.
  */
-function describePollFailure(error: unknown): string {
+function describePollFailure(error: unknown): PollFailure {
   if (error instanceof TelegramError && error.status === 409) {
-    return (
-      'Another process is already listening to this bot. Stop it — otherwise ' +
-      'both answer, and the student gets two different replies to one message.'
-    );
+    return {
+      kind: 'conflict',
+      message:
+        'Another process is already listening to this bot. Stop it — ' +
+        'otherwise both answer, and the student gets two different replies ' +
+        'to one message.',
+    };
   }
   const detail = error instanceof Error ? error.message : String(error);
-  return `Telegram poll failed, retrying: ${detail}`;
+  return {
+    kind: 'transient',
+    message: `Telegram poll failed, retrying: ${detail}`,
+  };
 }
 
 /** 401/404 mean a bad token or bot; retrying forever would just hide that. */

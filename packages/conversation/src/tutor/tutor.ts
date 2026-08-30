@@ -7,7 +7,7 @@ import { parseStructured } from '../agent/model-call.js';
 import type { DownloadedAttachment } from '../messaging/port.js';
 import { searchPages, type SearchablePage } from './retrieval.js';
 
-export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.3';
+export const TUTOR_PROMPT_VERSION = 'tutor/2026-08-30.4';
 export const DEFAULT_TUTOR_MODEL = 'claude-opus-5';
 
 /** How many pages of the book to put in front of the model by default. */
@@ -74,6 +74,7 @@ That restriction is the point of you. A student taught one method in class and a
 So:
 - If their material covers what they asked, help using its own method and notation. Set covered to true and list the page labels you leaned on.
 - If it does not cover it, set covered to false and say plainly that it is not in their book. Do not answer anyway. Do not explain it "generally". Do not guess which chapter it might be in.
+- When you say something is not in their book, say what you do have. Every page that has been read in is listed by name below, and that list is all of it — a page not on it does not exist for you. "Jag har s. 20-80 inlästa, och 1117 finns inte på någon av dem — fota sidan så tar vi den" tells them what to do next. "Det finns inte i boken" leaves them stuck, and sounds like their book is wrong when the truth is that a chapter was never read in.
 - If it covers part of it, help with that part and say which part is missing.
 
 Reading a photo of an exercise:
@@ -169,7 +170,10 @@ export async function runTutorTurn(input: TutorInput): Promise<TutorTurn> {
     });
     for (const file of files) content.push(toModelContentBlock(file));
   }
-  content.push({ type: 'text', text: pagesAndConversation(input, found) });
+  content.push({
+    type: 'text',
+    text: pagesAndConversation(input, found, pinned),
+  });
 
   const parsed = await parseStructured<z.infer<typeof tutorOutputSchema>>(
     client,
@@ -262,12 +266,20 @@ function interleave<T>(first: T[], second: T[]): T[] {
 function pagesAndConversation(
   input: TutorInput,
   found: SearchablePage[],
+  pinned: SearchablePage[],
 ): string {
   return [
     "Pages from the student's textbook:",
     found.length > 0
       ? found.map((page) => `--- ${page.label} ---\n${page.text}`).join('\n\n')
       : '(nothing in the book matched this question)',
+    '',
+    // Names only, not contents. Knowing which pages exist is what turns "not
+    // in your book" into "s. 40-71 are read in, that one is not — photograph
+    // it", and the difference between those two is whether the student can do
+    // anything about it.
+    'Every page that has been read in, by name. This list is all of it:',
+    catalogue(input, pinned),
     '',
     'The conversation so far:',
     (input.history ?? [])
@@ -306,4 +318,21 @@ function formatAnswer(parsed: z.infer<typeof tutorOutputSchema>): string {
   if (question) blocks.push(question);
 
   return blocks.join('\n\n');
+}
+
+/** How much of the page list to send. Names are short; a whole book still fits. */
+const CATALOGUE_LIMIT = 300;
+
+/** The names of every page the student has read in, retrieved or not. */
+function catalogue(input: TutorInput, pinned: SearchablePage[]): string {
+  const labels: string[] = [];
+  const seen = new Set<string>();
+  for (const page of [...pinned, ...input.pages]) {
+    if (seen.has(page.id)) continue;
+    seen.add(page.id);
+    labels.push(page.label);
+  }
+  if (labels.length === 0) return '(nothing read in yet)';
+  if (labels.length <= CATALOGUE_LIMIT) return labels.join(', ');
+  return `${labels.slice(0, CATALOGUE_LIMIT).join(', ')} and ${labels.length - CATALOGUE_LIMIT} more`;
 }
