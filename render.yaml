@@ -15,13 +15,13 @@ services:
       - key: DEMO_REPOSITORY
         value: postgresql
       - key: CONVERSATION_AGENT_PROVIDER
-        value: deterministic
+        value: anthropic
       - key: MSC_MODEL
         value: claude-sonnet-5
       - key: SENDBLUE_API_BASE_URL
         value: https://api.sendblue.co
       - key: MESSAGING_LIVE_ENABLED
-        sync: false
+        value: "true"
       - key: DATABASE_URL
         sync: false
       - key: SENDBLUE_API_KEY_ID
