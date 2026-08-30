@@ -1,6 +1,9 @@
 import { SendblueMessagingProvider } from '@math-study-companion/conversation';
 
-import { readConfig } from './config.js';
+import { existsSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+import { describeEnvKeys, readConfig, repoRoot } from './config.js';
 import { SendblueInboundServer } from './sendblue-inbound.js';
 import { serve } from './serve.js';
 
@@ -32,9 +35,17 @@ async function main(): Promise<void> {
     .map(([name]) => name);
 
   if (missing.length > 0) {
+    // Say which file was read and what was in it: the usual cause is values
+    // typed into .env.sendblue.example, which is a template and is never read.
+    const envFile = resolve(repoRoot, '.env');
     console.error(
-      `Missing in .env: ${missing.join(', ')}\n` +
-        'See .env.sendblue.example for what each one is.',
+      `Missing in .env: ${missing.join(', ')}\n\n` +
+        `Read ${envFile}\n` +
+        `  that file ${existsSync(envFile) ? 'exists' : 'does not exist yet'}\n` +
+        `  keys in it: ${describeEnvKeys() || '(none)'}\n\n` +
+        'Values go in .env itself. .env.sendblue.example only documents the\n' +
+        'names; nothing reads it. To copy the names across:\n' +
+        '  grep SENDBLUE .env.sendblue.example >> .env',
     );
     process.exitCode = 1;
     return;
